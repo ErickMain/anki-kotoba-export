@@ -103,3 +103,168 @@ def test_delete_deck_hits_the_right_endpoint(monkeypatch):
     api.delete_deck("connect.sid=abc", "deck123")
 
     assert captured["url"] == f"{api.BASE_URL}/decks/deck123"
+
+
+# -- retry/backoff -----------------------------------------------------
+
+
+def _no_sleep(monkeypatch, record=None):
+    """Replaces api.time.sleep with a fast no-op, optionally recording the
+    requested delays so tests don't actually wait."""
+    def fake_sleep(seconds):
+        if record is not None:
+            record.append(seconds)
+
+    monkeypatch.setattr(api.time, "sleep", fake_sleep)
+
+
+def test_retry_delay_uses_retry_after_header_when_present():
+    resp = FakeResponse(status_code=429, headers={"Retry-After": "3"})
+    assert api._retry_delay(0, resp) == 3.0
+
+
+def test_retry_delay_caps_retry_after_at_max_wait():
+    resp = FakeResponse(status_code=429, headers={"Retry-After": "60"})
+    assert api._retry_delay(0, resp) == api.MAX_RETRY_WAIT_SECONDS
+
+
+def test_retry_delay_ignores_non_numeric_retry_after():
+    resp = FakeResponse(status_code=429, headers={"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"})
+    # Falls back to the exponential schedule rather than parsing a date.
+    assert api._retry_delay(0, resp) == api.BASE_RETRY_DELAY_SECONDS
+
+
+def test_retry_delay_falls_back_to_exponential_backoff_without_retry_after():
+    resp = FakeResponse(status_code=502)
+    assert api._retry_delay(0, resp) == api.BASE_RETRY_DELAY_SECONDS
+    assert api._retry_delay(1, resp) == api.BASE_RETRY_DELAY_SECONDS * 2
+    assert api._retry_delay(5, resp) == api.MAX_RETRY_WAIT_SECONDS  # capped
+
+
+def test_retry_delay_exponential_with_no_response_at_all():
+    assert api._retry_delay(0, None) == api.BASE_RETRY_DELAY_SECONDS
+
+
+def test_send_with_retry_returns_immediately_on_success(monkeypatch):
+    _no_sleep(monkeypatch)
+    calls = []
+
+    def send():
+        calls.append(1)
+        return FakeResponse(status_code=200)
+
+    resp = api._send_with_retry(send)
+    assert resp.status_code == 200
+    assert len(calls) == 1
+
+
+def test_send_with_retry_does_not_retry_non_retryable_status(monkeypatch):
+    sleeps = []
+    _no_sleep(monkeypatch, sleeps)
+    calls = []
+
+    def send():
+        calls.append(1)
+        return FakeResponse(status_code=400)
+
+    resp = api._send_with_retry(send)
+    assert resp.status_code == 400
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_send_with_retry_retries_on_429_then_succeeds(monkeypatch):
+    sleeps = []
+    _no_sleep(monkeypatch, sleeps)
+    responses = [FakeResponse(status_code=429, headers={"Retry-After": "1"}), FakeResponse(status_code=200)]
+
+    def send():
+        return responses.pop(0)
+
+    resp = api._send_with_retry(send)
+    assert resp.status_code == 200
+    assert sleeps == [1.0]
+
+
+def test_send_with_retry_gives_up_after_max_retries(monkeypatch):
+    sleeps = []
+    _no_sleep(monkeypatch, sleeps)
+    calls = []
+
+    def send():
+        calls.append(1)
+        return FakeResponse(status_code=429, headers={})
+
+    resp = api._send_with_retry(send, max_retries=2)
+    assert resp.status_code == 429  # left for the caller's _raise_for_response to handle
+    assert len(calls) == 3  # initial attempt + 2 retries
+    assert len(sleeps) == 2
+
+
+def test_send_with_retry_retries_on_connection_error_then_succeeds(monkeypatch):
+    _no_sleep(monkeypatch)
+    attempts = {"n": 0}
+
+    def send():
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise api.requests.RequestException("connection reset")
+        return FakeResponse(status_code=200)
+
+    resp = api._send_with_retry(send)
+    assert resp.status_code == 200
+    assert attempts["n"] == 2
+
+
+def test_send_with_retry_raises_after_max_retries_on_connection_error(monkeypatch):
+    _no_sleep(monkeypatch)
+
+    def send():
+        raise api.requests.RequestException("connection reset")
+
+    try:
+        api._send_with_retry(send, max_retries=1)
+        assert False, "expected KotobaApiError"
+    except api.KotobaApiError as exc:
+        assert "connection reset" in str(exc)
+
+
+def test_send_with_retry_respects_zero_max_retries(monkeypatch):
+    sleeps = []
+    _no_sleep(monkeypatch, sleeps)
+    calls = []
+
+    def send():
+        calls.append(1)
+        return FakeResponse(status_code=429)
+
+    resp = api._send_with_retry(send, max_retries=0)
+    assert resp.status_code == 429
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_create_deck_retries_on_429(monkeypatch):
+    _no_sleep(monkeypatch)
+    responses = [
+        FakeResponse(status_code=429, headers={"Retry-After": "0"}),
+        FakeResponse(json_data={"_id": "new-id"}, headers={api.RESPONSE_READWRITE_SECRET_HEADER: "secret"}),
+    ]
+    monkeypatch.setattr(api.requests, "post", lambda *a, **kw: responses.pop(0))
+
+    result = api.create_deck("connect.sid=abc", "My Deck", "my_deck", [])
+
+    assert result == {"id": "new-id", "readwrite_secret": "secret"}
+
+
+def test_update_deck_retries_on_503(monkeypatch):
+    _no_sleep(monkeypatch)
+    responses = [
+        FakeResponse(status_code=503),
+        FakeResponse(headers={api.RESPONSE_READWRITE_SECRET_HEADER: "new-secret"}),
+    ]
+    monkeypatch.setattr(api.requests, "patch", lambda *a, **kw: responses.pop(0))
+
+    result = api.update_deck("connect.sid=abc", "deck-id", "old-secret", "My Deck", "my_deck", [])
+
+    assert result == {"readwrite_secret": "new-secret"}

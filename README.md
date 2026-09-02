@@ -9,7 +9,7 @@ Repo: [github.com/ErickMain/anki-kotoba-export](https://github.com/ErickMain/ank
 Kotoba's backend only supports login via Discord OAuth2 + a browser session cookie - there's no API key. So this add-on has two delivery modes:
 
 - **Clipboard export (default, no setup):** builds the exact CSV Kotoba's own custom-deck importer expects, copies it to your clipboard, and opens kotobaweb.com. You paste it into "New Custom Deck -> Import". Nothing here can be broken by a Kotoba login change.
-- **Advanced / direct API (opt-in):** paste your kotobaweb.com session cookie into *Kotoba Export -> Advanced settings* and the add-on will upload decks for you with one click, including overwriting the same deck on repeat runs. This uses an internal, undocumented API and your session cookie is a bearer secret - treat it like a password. See the warning text in that dialog for how to grab the cookie from DevTools.
+- **Advanced / direct API (opt-in):** paste your kotobaweb.com session cookie into *Kotoba Export -> Advanced settings* and the add-on will upload decks for you with one click, including overwriting the same deck on repeat runs. This uses an internal, undocumented API and your session cookie is a bearer secret - treat it like a password. See the warning text in that dialog for how to grab the cookie from DevTools. A rate-limited (429) or transiently-down (502/503/504) response is retried automatically with backoff - no setting to configure - before it surfaces as an error; automatic/unattended exports use a smaller retry budget than an interactive upload, since a retry adds real (if bounded) delay during Anki's own startup/shutdown/sync.
 
 ## Install
 

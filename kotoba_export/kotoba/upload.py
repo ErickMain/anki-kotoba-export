@@ -7,12 +7,17 @@ from . import api as kotoba_api
 from . import format as kotoba_format
 
 
-def upload_deck(cookie: str, preset, cards: list, deck_name: str) -> dict:
+def upload_deck(cookie: str, preset, cards: list, deck_name: str, max_retries: int = kotoba_api.MAX_RETRIES) -> dict:
     """Creates or overwrites (per preset.deck_reuse_mode) a Kotoba deck for
     `deck_name`. Mutates preset.deck_links in place on success - callers are
     responsible for persisting the preset afterward. Raises
     kotoba_api.KotobaApiError on failure; callers decide how to surface or
     log that (a dialog for interactive use, a history entry for automatic).
+
+    max_retries is forwarded to the underlying API calls - unattended
+    callers (__init__.py's automatic export) pass a smaller budget than the
+    interactive default, since retries add bounded but real delay and this
+    can run during Anki's own startup/shutdown/sync.
     """
     short_name = kotoba_format.make_short_name(deck_name)
     overwrite = preset.deck_reuse_mode == "overwrite"
@@ -28,6 +33,7 @@ def upload_deck(cookie: str, preset, cards: list, deck_name: str) -> dict:
                 short_name,
                 cards,
                 description=preset.deck_description,
+                max_retries=max_retries,
             )
             preset.set_deck_link(deck_name, link["id"], resp["readwrite_secret"])
             return {"id": link["id"]}
@@ -37,7 +43,7 @@ def upload_deck(cookie: str, preset, cards: list, deck_name: str) -> dict:
             pass
 
     resp = kotoba_api.create_deck(
-        cookie, deck_name, short_name, cards, description=preset.deck_description
+        cookie, deck_name, short_name, cards, description=preset.deck_description, max_retries=max_retries
     )
     if overwrite:
         preset.set_deck_link(deck_name, resp["id"], resp["readwrite_secret"])

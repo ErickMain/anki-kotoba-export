@@ -15,6 +15,12 @@ from .kotoba import history
 from .kotoba import upload as upload_mod
 from .kotoba.presets import load_presets, upsert_preset
 
+# Tighter than api.MAX_RETRIES (the interactive default): retries add
+# bounded but real delay, and this runs during Anki's own
+# startup/shutdown/sync - one retry still recovers from a single rate-limit
+# hit without multiplying the worst-case block much further.
+AUTO_EXPORT_MAX_RETRIES = 1
+
 
 def _open_main_dialog():
     MainDialog(mw).exec()
@@ -101,7 +107,9 @@ def _run_auto_presets(trigger: str):
                 )
                 continue
 
-            upload_mod.upload_deck(cookie, preset, result.cards, result.deck_name)
+            upload_mod.upload_deck(
+                cookie, preset, result.cards, result.deck_name, max_retries=AUTO_EXPORT_MAX_RETRIES
+            )
             config = upsert_preset(config, preset)  # persists the updated deck_links
             config = history.append_entry(
                 config,

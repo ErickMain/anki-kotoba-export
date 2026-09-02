@@ -2,13 +2,6 @@
 
 Ideas for kotoba_export, not yet built. Pick from here next session.
 
-## Bigger / optional
-
-- **Retry/backoff for the direct API.** Kotoba rate-limits POST/PATCH
-  (`postPatchLimiter`). No longer hypothetical now that "run all" and
-  automatic startup/shutdown/sync export all exist and can fire several
-  uploads back to back - worth picking up next if a run ever hits a 429.
-
 ## Low priority - only if it turns out to matter
 
 - Combine multiple Anki fields into one Answers list (e.g. separate
@@ -52,8 +45,15 @@ upload and log to history even when skipped, so a misconfiguration is
 visible instead of silent; verified end-to-end against a real Anki
 restart and a real AnkiWeb sync, all three triggers; migration from the
 pre-sync single-value auto_run field verified against a real
-already-configured preset), `.ankiaddon` packaging, GitHub repo with
-tagged releases carrying the packaged addon
+already-configured preset), retry/backoff for the direct API (429 with
+Retry-After support, capped exponential backoff otherwise, also covering
+502/503/504; interactive calls get 2 retries, automatic/unattended calls
+get 1 - fewer, since a retry adds bounded but real delay during Anki's
+own startup/shutdown/sync; create_deck's retry-on-connection-error is
+safe against duplicate decks because Kotoba's own checkShortNameUnique
+rejects a genuine duplicate attempt instead of creating a second deck),
+`.ankiaddon` packaging, GitHub repo with tagged releases carrying the
+packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 

@@ -12,6 +12,8 @@ common/deck_permissions.js and common/deck_validation.js (checked
 2026-09-01). If Kotoba changes its site, this module is what breaks - the
 clipboard/CSV flow in format.py does not depend on any of this.
 """
+import time
+
 import requests
 
 BASE_URL = "https://kotobaweb.com/api"
@@ -20,6 +22,19 @@ RESPONSE_READWRITE_SECRET_HEADER = "Deck-Read-Write-Secret"
 RESPONSE_PERMISSIONS_HEADER = "Deck-Permissions"
 
 TIMEOUT_SECONDS = 15
+
+# Kotoba rate-limits POST/PATCH deck routes (postPatchLimiter in its own
+# source) - a "run all" or automatic export can now plausibly fire enough
+# uploads back to back to hit that. Retries are deliberately conservative:
+# few attempts, short capped waits. This can run unattended during Anki's
+# own startup/shutdown/sync, where a long block is worse than a failed
+# upload that gets logged to history and can just be retried next time -
+# callers running unattended (see kotoba/upload.py, __init__.py) pass a
+# smaller max_retries than this interactive default.
+MAX_RETRIES = 2
+BASE_RETRY_DELAY_SECONDS = 1.0
+MAX_RETRY_WAIT_SECONDS = 8.0
+_RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
 
 
 class KotobaApiError(Exception):
@@ -94,6 +109,47 @@ def _extract_error_detail(resp) -> str:
     return str(data)[:300]
 
 
+def _retry_delay(attempt: int, resp) -> float:
+    """attempt: 0-based count of retries already made (0 = about to make
+    the first retry). Prefers a 429's Retry-After header when it's a plain
+    integer-seconds value (an HTTP-date value falls back to the exponential
+    schedule instead of parsing dates) over guessing, but never waits past
+    MAX_RETRY_WAIT_SECONDS regardless of what the server asked for - a
+    server asking for a long cooldown just means the retry likely fails
+    again and the normal error path takes over, not that this should block
+    for as long as the server would like.
+    """
+    if resp is not None and resp.status_code == 429:
+        retry_after = resp.headers.get("Retry-After", "").strip()
+        if retry_after.isdigit():
+            return min(float(retry_after), MAX_RETRY_WAIT_SECONDS)
+    return min(BASE_RETRY_DELAY_SECONDS * (2**attempt), MAX_RETRY_WAIT_SECONDS)
+
+
+def _send_with_retry(send, max_retries: int = MAX_RETRIES):
+    """Calls `send()` (a zero-arg callable performing one HTTP request),
+    retrying with backoff on a 429/502/503/504 or a connection-level
+    failure, up to `max_retries` times. Returns the last response as-is
+    (even a failing one) so the caller's usual _raise_for_response still
+    handles the final status code; only raises KotobaApiError itself if
+    every attempt failed to connect at all.
+    """
+    resp = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = send()
+        except requests.RequestException as exc:
+            if attempt >= max_retries:
+                raise KotobaApiError(f"Could not reach kotobaweb.com: {exc}") from exc
+            time.sleep(_retry_delay(attempt, None))
+            continue
+
+        if resp.ok or resp.status_code not in _RETRYABLE_STATUS_CODES or attempt >= max_retries:
+            return resp
+        time.sleep(_retry_delay(attempt, resp))
+    return resp
+
+
 def _raise_for_response(resp):
     if resp.status_code == 401:
         raise KotobaApiError(
@@ -106,44 +162,42 @@ def _raise_for_response(resp):
         raise KotobaApiError(f"Kotoba API error {resp.status_code}: {detail}", status_code=resp.status_code)
 
 
-def test_connection(cookie_header: str) -> dict:
+def test_connection(cookie_header: str, max_retries: int = MAX_RETRIES) -> dict:
     """Hits GET /users/me. Returns the user's JSON on success, raises
     KotobaApiError otherwise.
     """
-    try:
-        resp = requests.get(
-            f"{BASE_URL}/users/me", headers=_headers(cookie_header), timeout=TIMEOUT_SECONDS
-        )
-    except requests.RequestException as exc:
-        raise KotobaApiError(f"Could not reach kotobaweb.com: {exc}") from exc
+    resp = _send_with_retry(
+        lambda: requests.get(f"{BASE_URL}/users/me", headers=_headers(cookie_header), timeout=TIMEOUT_SECONDS),
+        max_retries=max_retries,
+    )
     _raise_for_response(resp)
     return resp.json()
 
 
-def list_my_decks(cookie_header: str) -> list:
+def list_my_decks(cookie_header: str, max_retries: int = MAX_RETRIES) -> list:
     """GET /users/me/decks. Returns the logged-in user's decks as raw dicts
     - fields include _id, name, shortName, hidden, public, lastModified per
     the CustomDeckModel schema, but that schema isn't publicly documented,
     so callers should read fields defensively with .get().
     """
-    try:
-        resp = requests.get(
+    resp = _send_with_retry(
+        lambda: requests.get(
             f"{BASE_URL}/users/me/decks", headers=_headers(cookie_header), timeout=TIMEOUT_SECONDS
-        )
-    except requests.RequestException as exc:
-        raise KotobaApiError(f"Could not reach kotobaweb.com: {exc}") from exc
+        ),
+        max_retries=max_retries,
+    )
     _raise_for_response(resp)
     return resp.json()
 
 
-def delete_deck(cookie_header: str, deck_id: str) -> None:
+def delete_deck(cookie_header: str, deck_id: str, max_retries: int = MAX_RETRIES) -> None:
     """DELETE /decks/{id}. Requires the logged-in user to own the deck."""
-    try:
-        resp = requests.delete(
+    resp = _send_with_retry(
+        lambda: requests.delete(
             f"{BASE_URL}/decks/{deck_id}", headers=_headers(cookie_header), timeout=TIMEOUT_SECONDS
-        )
-    except requests.RequestException as exc:
-        raise KotobaApiError(f"Could not reach kotobaweb.com: {exc}") from exc
+        ),
+        max_retries=max_retries,
+    )
     _raise_for_response(resp)
 
 
@@ -168,8 +222,19 @@ def create_deck(
     description: str = "",
     public: bool = False,
     hidden: bool = True,
+    max_retries: int = MAX_RETRIES,
 ) -> dict:
-    """POST /decks. Returns {"id": ..., "readwrite_secret": ...}."""
+    """POST /decks. Returns {"id": ..., "readwrite_secret": ...}.
+
+    POST isn't naturally idempotent, so a retry after a connection error
+    could in principle create a duplicate if the first attempt actually
+    reached the server. In practice this is covered: Kotoba's own
+    checkShortNameUnique middleware runs before deck creation, and
+    short_name is deterministic from the deck name, so a genuine duplicate
+    attempt just gets rejected with a clear "name taken" error (surfaced
+    normally through _raise_for_response) instead of silently creating a
+    second deck.
+    """
     body = {
         "name": name,
         "shortName": short_name,
@@ -178,12 +243,12 @@ def create_deck(
         "public": public,
         "hidden": hidden,
     }
-    try:
-        resp = requests.post(
+    resp = _send_with_retry(
+        lambda: requests.post(
             f"{BASE_URL}/decks", json=body, headers=_headers(cookie_header), timeout=TIMEOUT_SECONDS
-        )
-    except requests.RequestException as exc:
-        raise KotobaApiError(f"Could not reach kotobaweb.com: {exc}") from exc
+        ),
+        max_retries=max_retries,
+    )
     _raise_for_response(resp)
     data = resp.json()
     return {
@@ -200,11 +265,15 @@ def update_deck(
     short_name: str,
     cards: list,
     description: str = "",
+    max_retries: int = MAX_RETRIES,
 ) -> dict:
     """PATCH /decks/{id}, authenticated with the deck's own readwrite secret
     (not just the login cookie - Kotoba requires both: a logged-in user AND
     either ownership or this secret). Returns {"readwrite_secret": ...}
-    (Kotoba re-issues the secret on every authorized response).
+    (Kotoba re-issues the secret on every authorized response). PATCH is
+    naturally idempotent (same body -> same end state), so retrying on a
+    connection error carries none of create_deck's duplicate-creation
+    concern.
     """
     body = {
         "name": name,
@@ -212,14 +281,14 @@ def update_deck(
         "description": description,
         "cards": _cards_payload(cards),
     }
-    try:
-        resp = requests.patch(
+    resp = _send_with_retry(
+        lambda: requests.patch(
             f"{BASE_URL}/decks/{deck_id}",
             json=body,
             headers=_headers(cookie_header, {REQUEST_SECRET_HEADER: readwrite_secret}),
             timeout=TIMEOUT_SECONDS,
-        )
-    except requests.RequestException as exc:
-        raise KotobaApiError(f"Could not reach kotobaweb.com: {exc}") from exc
+        ),
+        max_retries=max_retries,
+    )
     _raise_for_response(resp)
     return {"readwrite_secret": resp.headers.get(RESPONSE_READWRITE_SECRET_HEADER, readwrite_secret)}
