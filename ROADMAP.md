@@ -2,6 +2,29 @@
 
 Ideas for kotoba_export, not yet built. Pick from here next session.
 
+## Requested 2026-09-02 (during "let it run for real for a few days")
+
+- **Export History to CSV.** A "Export to CSV..." button in the History
+  dialog (alongside "Clear history"), dumping the current log to a file -
+  same shape as the existing preset export/import, just for history
+  instead of presets. Lets the real-use test period leave a record outside
+  Anki's own config store.
+- **Automatic export on AnkiWeb sync**, as a third trigger alongside
+  startup/shutdown - `Preset.auto_run` gets a `"sync"` option (and syncs
+  into the "both" story: probably becomes a proper set of trigger flags
+  rather than a single off/startup/shutdown/both enum once there are three
+  triggers instead of two). Likely hook: `gui_hooks.sync_did_finish`. Worth
+  noting this is actually a *better* fit than shutdown for "forgotten
+  today"-style presets on a routine of review-then-sync, and doesn't carry
+  the same "delays Anki closing" risk shutdown does - though it could still
+  add a pause right after sync finishes if the upload is slow.
+- **Export duration.** Track and show how long each run took (probably a
+  `duration_seconds` field on `HistoryEntry`, shown as a column in the
+  History dialog). Best guess at intent: a lightweight way to keep an eye
+  on the "shutdown-triggered auto-export can hang Anki's close for ~15s if
+  Kotoba is slow" risk that came up when discussing what's least tested -
+  if that reading is wrong, correct it when this gets picked up.
+
 ## Bigger / optional
 
 - **Retry/backoff for the direct API.** Kotoba rate-limits POST/PATCH
