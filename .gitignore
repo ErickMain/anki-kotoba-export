@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Build output - releases are distributed via GitHub Releases, not committed
+*.ankiaddon

@@ -1,0 +1,7 @@
+{
+    "presets": [],
+    "advanced": {
+        "direct_api_enabled": false,
+        "session_cookie": ""
+    }
+}

@@ -1,0 +1,117 @@
+"""Preset data model + CRUD against the addon's config dict.
+
+A preset bundles: which cards to pull (quick-filter chips + tags + a raw
+Anki search string), which note type and fields they come from, how those
+fields map onto Kotoba's Question/Answers/Comment columns, and how the
+resulting deck should be named/reused on Kotoba.
+"""
+import dataclasses
+import uuid
+from dataclasses import asdict, dataclass, field
+
+DEFAULT_INSTRUCTIONS = "Type the reading!"
+DEFAULT_DECK_NAME_TEMPLATE = "{preset_name} - {date}"
+
+REUSE_NEW_EACH_TIME = "new_each_time"
+REUSE_OVERWRITE = "overwrite"
+
+
+@dataclass
+class Preset:
+    id: str
+    name: str
+    note_type: str = ""
+
+    # Quick-filter chips, AND-ed together with tags and raw_query.
+    forgotten_today: bool = False
+    leech: bool = False
+    suspended: bool = False
+    due: bool = False
+    tags: list = field(default_factory=list)
+    deck: str = ""  # "" = any deck; otherwise also matches its subdecks
+    raw_query: str = ""
+
+    # Which note field (by name) supplies each of the three concepts.
+    expression_field: str = ""
+    reading_field: str = ""
+    meaning_field: str = ""
+
+    # Which concept feeds which Kotoba CSV column. "none" for comment_source
+    # means the Comment column is left blank.
+    question_source: str = "expression"
+    answer_source: str = "reading"
+    comment_source: str = "meaning"
+
+    strip_furigana_brackets: bool = True
+    # Mined notes (Yomitan/JPDB-style) often stuff several dictionaries'
+    # worth of glosses into one field - way past what a quiz hint needs, and
+    # past Kotoba's own 600-char Comment cap. Comment text gets cut to this
+    # length (word-boundary aware) before export; export.py additionally
+    # clamps it to Kotoba's real limit regardless of what's set here.
+    comment_max_length: int = 300
+    # "IMAGE" renders the question as a picture Kotoba generates from the
+    # text - the convention reading-practice decks use so the kanji can't be
+    # copy/pasted into a translator, defeating the point of "type the
+    # reading". "TEXT" shows it as selectable text instead.
+    render_as: str = "IMAGE"
+    instructions: str = DEFAULT_INSTRUCTIONS
+    deck_name_template: str = DEFAULT_DECK_NAME_TEMPLATE
+    deck_description: str = ""
+    # "overwrite" links by the *rendered deck name*, not just "this preset":
+    # running with the same name PATCHes the same Kotoba deck; typing a
+    # different name at export time (in the preview dialog) creates a new,
+    # separate deck instead of touching the old one. So a template that
+    # includes {date} still makes a fresh deck every day even in overwrite
+    # mode - drop {date} from the template for a single deck that keeps
+    # getting replaced.
+    deck_reuse_mode: str = REUSE_NEW_EACH_TIME
+
+    # deck_links: {rendered_deck_name: {"id": ..., "secret": ...}},
+    # populated after a successful direct-API export in overwrite mode so a
+    # later run with that same name knows which Kotoba deck to PATCH.
+    deck_links: dict = field(default_factory=dict)
+
+    @staticmethod
+    def new(name: str) -> "Preset":
+        return Preset(id=str(uuid.uuid4()), name=name)
+
+    def get_deck_link(self, deck_name: str):
+        """Returns {"id": ..., "secret": ...} for a previously-uploaded deck
+        with this exact rendered name, or None if none exists yet."""
+        return self.deck_links.get(deck_name)
+
+    def set_deck_link(self, deck_name: str, deck_id: str, readwrite_secret: str) -> None:
+        self.deck_links[deck_name] = {"id": deck_id, "secret": readwrite_secret}
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @staticmethod
+    def from_dict(d: dict) -> "Preset":
+        known = {f.name for f in dataclasses.fields(Preset)}
+        return Preset(**{k: v for k, v in d.items() if k in known})
+
+
+def load_presets(config: dict) -> list:
+    return [Preset.from_dict(p) for p in config.get("presets", [])]
+
+
+def save_presets(config: dict, presets: list) -> dict:
+    config["presets"] = [p.to_dict() for p in presets]
+    return config
+
+
+def upsert_preset(config: dict, preset: Preset) -> dict:
+    presets = load_presets(config)
+    for i, existing in enumerate(presets):
+        if existing.id == preset.id:
+            presets[i] = preset
+            break
+    else:
+        presets.append(preset)
+    return save_presets(config, presets)
+
+
+def delete_preset(config: dict, preset_id: str) -> dict:
+    presets = [p for p in load_presets(config) if p.id != preset_id]
+    return save_presets(config, presets)
