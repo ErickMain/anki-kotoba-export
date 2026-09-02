@@ -3,7 +3,9 @@ how it went - so you can tell at a glance whether an automatic run actually
 did anything, without having to remember to check. Stored in the same
 config dict as presets/settings, capped at MAX_ENTRIES so it stays "small".
 """
+import csv
 import dataclasses
+import io
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
@@ -78,3 +80,32 @@ def append_entry(config: dict, entry: HistoryEntry) -> dict:
 def clear_history(config: dict) -> dict:
     config["history"] = []
     return config
+
+
+CSV_HEADER_ROW = ["Timestamp", "Preset", "Deck", "Cards", "Outcome", "Trigger", "Detail"]
+
+
+def history_to_csv(entries: list) -> str:
+    """Serialize history entries to CSV, for taking a copy of the log out of
+    Anki (e.g. into a spreadsheet) - same idea as presets_to_json, but for
+    the history log. Written in the order given; callers wanting
+    chronological order should pass load_history()'s result as-is (oldest
+    first) rather than the History dialog's reversed (newest-first) display
+    order.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\r\n")
+    writer.writerow(CSV_HEADER_ROW)
+    for entry in entries:
+        writer.writerow(
+            [
+                entry.timestamp,
+                entry.preset_name,
+                entry.deck_name,
+                entry.card_count,
+                entry.outcome,
+                entry.triggered_by,
+                entry.detail,
+            ]
+        )
+    return buf.getvalue()

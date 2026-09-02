@@ -4,11 +4,6 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
 
 ## Requested 2026-09-02 (during "let it run for real for a few days")
 
-- **Export History to CSV.** A "Export to CSV..." button in the History
-  dialog (alongside "Clear history"), dumping the current log to a file -
-  same shape as the existing preset export/import, just for history
-  instead of presets. Lets the real-use test period leave a record outside
-  Anki's own config store.
 - **Automatic export on AnkiWeb sync**, as a third trigger alongside
   startup/shutdown - `Preset.auto_run` gets a `"sync"` option (and syncs
   into the "both" story: probably becomes a proper set of trigger flags
@@ -58,7 +53,9 @@ in Discord), "run all" (multi-select the preset list, ctrl/shift-click, and
 Run fires each one's preview in turn - e.g. forgotten today + due + leeches
 in one action), export history log (main dialog -> History..., a capped
 log of every export - manual and automatic - with preset/deck/card
-count/outcome/trigger), scheduled/automatic export (per-preset "Automatic
+count/outcome/trigger), export history to CSV (History -> Export to
+CSV..., chronological, UTF-8 with BOM so Japanese preset/deck names open
+cleanly in Excel), scheduled/automatic export (per-preset "Automatic
 export: startup/shutdown/both", gated by a global switch in Advanced
 settings so nothing runs unless both are explicitly on; unattended runs
 always go through direct-API upload and log to history even when skipped,

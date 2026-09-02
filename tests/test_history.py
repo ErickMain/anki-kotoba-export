@@ -52,6 +52,44 @@ def test_clear_history():
     assert history.load_history(config) == []
 
 
+def test_history_to_csv_header_and_row():
+    entry = history.new_entry(
+        "Forgotten Today",
+        "Anki Forgotten Today",
+        12,
+        history.OUTCOME_UPLOADED,
+        triggered_by=history.TRIGGER_AUTO_STARTUP,
+        now=datetime(2026, 9, 2, 14, 23, 1),
+    )
+    csv_text = history.history_to_csv([entry])
+
+    assert csv_text.startswith("Timestamp,Preset,Deck,Cards,Outcome,Trigger,Detail")
+    assert "2026-09-02T14:23:01,Forgotten Today,Anki Forgotten Today,12,uploaded,startup," in csv_text
+
+
+def test_history_to_csv_includes_detail_and_quotes_commas():
+    entry = history.new_entry(
+        "A", "Deck, with a comma", 0, history.OUTCOME_ERROR, detail="timed out, retry later"
+    )
+    csv_text = history.history_to_csv([entry])
+
+    assert '"Deck, with a comma"' in csv_text
+    assert '"timed out, retry later"' in csv_text
+
+
+def test_history_to_csv_empty_list_is_header_only():
+    csv_text = history.history_to_csv([])
+    assert csv_text.strip() == "Timestamp,Preset,Deck,Cards,Outcome,Trigger,Detail"
+
+
+def test_history_to_csv_preserves_given_order():
+    a = history.new_entry("A", "Deck A", 1, history.OUTCOME_COPIED)
+    b = history.new_entry("B", "Deck B", 2, history.OUTCOME_UPLOADED)
+    csv_text = history.history_to_csv([a, b])
+
+    assert csv_text.index("A,Deck A") < csv_text.index("B,Deck B")
+
+
 def test_from_dict_ignores_unknown_fields():
     entry = history.HistoryEntry.from_dict(
         {
