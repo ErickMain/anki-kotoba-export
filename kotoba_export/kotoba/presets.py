@@ -16,10 +16,16 @@ DEFAULT_DECK_NAME_TEMPLATE = "{preset_name} - {date}"
 REUSE_NEW_EACH_TIME = "new_each_time"
 REUSE_OVERWRITE = "overwrite"
 
-AUTO_RUN_OFF = "off"
 AUTO_RUN_STARTUP = "startup"
 AUTO_RUN_SHUTDOWN = "shutdown"
-AUTO_RUN_BOTH = "both"
+AUTO_RUN_SYNC = "sync"
+ALL_AUTO_RUN_TRIGGERS = (AUTO_RUN_STARTUP, AUTO_RUN_SHUTDOWN, AUTO_RUN_SYNC)
+
+# Legacy value from before auto_run_triggers existed ("off" needed no
+# constant - _migrate_legacy_auto_run_field's else branch already covers
+# it and anything else unrecognized), kept only so
+# _migrate_legacy_auto_run_field can recognize and translate it.
+_LEGACY_AUTO_RUN_BOTH = "both"
 
 
 def _migrate_legacy_note_type_fields(d: dict) -> dict:
@@ -39,6 +45,28 @@ def _migrate_legacy_note_type_fields(d: dict) -> dict:
             "meaning_field": d.get("meaning_field", ""),
         }
     }
+    return d
+
+
+def _migrate_legacy_auto_run_field(d: dict) -> dict:
+    """Presets saved before the sync trigger existed stored a single
+    auto_run string ("off"/"startup"/"shutdown"/"both") rather than a list
+    of triggers - a single-value enum stopped scaling once there was a
+    third independent trigger to combine. Fold that into the new
+    auto_run_triggers list so existing presets keep their setting
+    unchanged. No-op if auto_run_triggers is already present, or there's no
+    legacy auto_run to migrate.
+    """
+    if "auto_run_triggers" in d or "auto_run" not in d:
+        return d
+    d = dict(d)
+    legacy = d["auto_run"]
+    if legacy == _LEGACY_AUTO_RUN_BOTH:
+        d["auto_run_triggers"] = [AUTO_RUN_STARTUP, AUTO_RUN_SHUTDOWN]
+    elif legacy in (AUTO_RUN_STARTUP, AUTO_RUN_SHUTDOWN):
+        d["auto_run_triggers"] = [legacy]
+    else:
+        d["auto_run_triggers"] = []
     return d
 
 
@@ -94,12 +122,14 @@ class Preset:
     # getting replaced.
     deck_reuse_mode: str = REUSE_NEW_EACH_TIME
 
-    # "off"/"startup"/"shutdown"/"both": runs this preset unattended via
-    # direct-API upload (there's no one there to click Copy/Upload) when
-    # Anki opens and/or closes the profile. Requires advanced mode AND the
-    # global auto-export switch (config["advanced"]["auto_export_enabled"])
-    # to both be on - this field alone does not enable anything.
-    auto_run: str = "off"
+    # Subset of ALL_AUTO_RUN_TRIGGERS ("startup"/"shutdown"/"sync"): runs
+    # this preset unattended via direct-API upload (there's no one there to
+    # click Copy/Upload) whenever any checked trigger fires - Anki opening,
+    # closing, or finishing an AnkiWeb sync. Empty list = never runs
+    # automatically. Requires advanced mode AND the global auto-export
+    # switch (config["advanced"]["auto_export_enabled"]) to both be on -
+    # this field alone does not enable anything.
+    auto_run_triggers: list = field(default_factory=list)
 
     # deck_links: {rendered_deck_name: {"id": ..., "secret": ...}},
     # populated after a successful direct-API export in overwrite mode so a
@@ -125,10 +155,9 @@ class Preset:
         return Preset.from_dict(data)
 
     def matches_auto_trigger(self, trigger: str) -> bool:
-        """trigger: AUTO_RUN_STARTUP or AUTO_RUN_SHUTDOWN. True if this
-        preset should run unattended for that trigger (auto_run is exactly
-        that trigger, or AUTO_RUN_BOTH)."""
-        return self.auto_run in (trigger, AUTO_RUN_BOTH)
+        """trigger: AUTO_RUN_STARTUP, AUTO_RUN_SHUTDOWN, or AUTO_RUN_SYNC.
+        True if this preset is set to run unattended for that trigger."""
+        return trigger in self.auto_run_triggers
 
     def get_deck_link(self, deck_name: str):
         """Returns {"id": ..., "secret": ...} for a previously-uploaded deck
@@ -159,6 +188,7 @@ class Preset:
     @staticmethod
     def from_dict(d: dict) -> "Preset":
         d = _migrate_legacy_note_type_fields(d)
+        d = _migrate_legacy_auto_run_field(d)
         known = {f.name for f in dataclasses.fields(Preset)}
         return Preset(**{k: v for k, v in d.items() if k in known})
 

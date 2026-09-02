@@ -2,24 +2,12 @@
 
 Ideas for kotoba_export, not yet built. Pick from here next session.
 
-## Requested 2026-09-02 (during "let it run for real for a few days")
-
-- **Automatic export on AnkiWeb sync**, as a third trigger alongside
-  startup/shutdown - `Preset.auto_run` gets a `"sync"` option (and syncs
-  into the "both" story: probably becomes a proper set of trigger flags
-  rather than a single off/startup/shutdown/both enum once there are three
-  triggers instead of two). Likely hook: `gui_hooks.sync_did_finish`. Worth
-  noting this is actually a *better* fit than shutdown for "forgotten
-  today"-style presets on a routine of review-then-sync, and doesn't carry
-  the same "delays Anki closing" risk shutdown does - though it could still
-  add a pause right after sync finishes if the upload is slow.
-
 ## Bigger / optional
 
 - **Retry/backoff for the direct API.** Kotoba rate-limits POST/PATCH
   (`postPatchLimiter`). No longer hypothetical now that "run all" and
-  automatic startup/shutdown export both exist and can fire several uploads
-  back to back - worth picking up next if a run ever hits a 429.
+  automatic startup/shutdown/sync export all exist and can fire several
+  uploads back to back - worth picking up next if a run ever hits a 429.
 
 ## Low priority - only if it turns out to matter
 
@@ -54,13 +42,18 @@ open cleanly in Excel), export duration (a Duration column on every
 history entry - for manual runs, just the delivery action's own time; for
 automatic runs, the full search+build+upload, i.e. exactly what could
 delay Anki's startup/shutdown; the automatic-export completion toast
-reports total elapsed time too), scheduled/automatic export (per-preset
-"Automatic export: startup/shutdown/both", gated by a global switch in Advanced
-settings so nothing runs unless both are explicitly on; unattended runs
-always go through direct-API upload and log to history even when skipped,
-so a misconfiguration is visible instead of silent; verified end-to-end
-against a real Anki restart, both triggers), `.ankiaddon` packaging, GitHub
-repo with tagged releases carrying the packaged addon
+reports total elapsed time too), scheduled/automatic export on Anki
+startup/shutdown/AnkiWeb sync (per-preset checkboxes - any combination of
+the three - gated by a global switch in Advanced settings so nothing runs
+unless both are explicitly on; auto_run_triggers is a list rather than a
+single enum specifically so a third trigger like sync could be added
+without another redesign; unattended runs always go through direct-API
+upload and log to history even when skipped, so a misconfiguration is
+visible instead of silent; verified end-to-end against a real Anki
+restart and a real AnkiWeb sync, all three triggers; migration from the
+pre-sync single-value auto_run field verified against a real
+already-configured preset), `.ankiaddon` packaging, GitHub repo with
+tagged releases carrying the packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 

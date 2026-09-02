@@ -19,11 +19,13 @@ OUTCOME_SKIPPED = "skipped"  # deliberately not run (e.g. unattended safety chec
 OUTCOME_ERROR = "error"
 
 TRIGGER_MANUAL = "manual"
-# Same string values as presets.AUTO_RUN_STARTUP/AUTO_RUN_SHUTDOWN on
-# purpose, so a trigger value can be passed straight into both
-# Preset.matches_auto_trigger() and history.new_entry() with no translation.
+# Same string values as presets.AUTO_RUN_STARTUP/AUTO_RUN_SHUTDOWN/
+# AUTO_RUN_SYNC on purpose, so a trigger value can be passed straight into
+# both Preset.matches_auto_trigger() and history.new_entry() with no
+# translation.
 TRIGGER_AUTO_STARTUP = "startup"
 TRIGGER_AUTO_SHUTDOWN = "shutdown"
+TRIGGER_AUTO_SYNC = "sync"
 
 
 @dataclass

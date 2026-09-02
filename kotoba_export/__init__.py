@@ -35,11 +35,12 @@ def _on_browser_menus_did_init(browser):
 
 
 def _run_auto_presets(trigger: str):
-    """Unattended export for presets with auto_run set to `trigger` (or
-    "both"). Runs on Anki startup/shutdown, so this must never show a
-    dialog or raise - anything unexpected gets logged to history instead
-    and the loop moves on, so one bad preset can't hang or crash Anki's own
-    startup/shutdown sequence.
+    """Unattended export for presets whose auto_run_triggers includes
+    `trigger`. Runs on Anki startup/shutdown or right after an AnkiWeb sync
+    finishes, so this must never show a dialog or raise - anything
+    unexpected gets logged to history instead and the loop moves on, so one
+    bad preset can't hang or crash Anki's own startup/shutdown/sync
+    sequence.
     """
     run_start = time.perf_counter()
     config = config_store.get_config()
@@ -142,6 +143,7 @@ def _setup():
     gui_hooks.browser_menus_did_init.append(_on_browser_menus_did_init)
     gui_hooks.profile_did_open.append(lambda: _run_auto_presets(history.TRIGGER_AUTO_STARTUP))
     gui_hooks.profile_will_close.append(lambda: _run_auto_presets(history.TRIGGER_AUTO_SHUTDOWN))
+    gui_hooks.sync_did_finish.append(lambda: _run_auto_presets(history.TRIGGER_AUTO_SYNC))
 
 
 _setup()

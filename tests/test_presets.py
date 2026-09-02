@@ -1,10 +1,9 @@
 import pytest
 
 from kotoba.presets import (
-    AUTO_RUN_BOTH,
-    AUTO_RUN_OFF,
     AUTO_RUN_SHUTDOWN,
     AUTO_RUN_STARTUP,
+    AUTO_RUN_SYNC,
     Preset,
     load_presets,
     presets_from_json,
@@ -14,25 +13,54 @@ from kotoba.presets import (
 )
 
 
-def test_auto_run_defaults_to_off():
+def test_auto_run_triggers_defaults_to_empty():
     p = Preset.new("A")
-    assert p.auto_run == AUTO_RUN_OFF
+    assert p.auto_run_triggers == []
     assert not p.matches_auto_trigger(AUTO_RUN_STARTUP)
     assert not p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
+    assert not p.matches_auto_trigger(AUTO_RUN_SYNC)
 
 
 def test_matches_auto_trigger_for_a_specific_trigger():
     p = Preset.new("A")
-    p.auto_run = AUTO_RUN_STARTUP
+    p.auto_run_triggers = [AUTO_RUN_STARTUP]
     assert p.matches_auto_trigger(AUTO_RUN_STARTUP)
     assert not p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
+    assert not p.matches_auto_trigger(AUTO_RUN_SYNC)
 
 
-def test_matches_auto_trigger_both_matches_either():
+def test_matches_auto_trigger_supports_any_combination():
     p = Preset.new("A")
-    p.auto_run = AUTO_RUN_BOTH
+    p.auto_run_triggers = [AUTO_RUN_SHUTDOWN, AUTO_RUN_SYNC]
+    assert not p.matches_auto_trigger(AUTO_RUN_STARTUP)
+    assert p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
+    assert p.matches_auto_trigger(AUTO_RUN_SYNC)
+
+
+def test_from_dict_migrates_legacy_auto_run_both():
+    legacy = {"id": "abc", "name": "A", "auto_run": "both"}
+    p = Preset.from_dict(legacy)
     assert p.matches_auto_trigger(AUTO_RUN_STARTUP)
     assert p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
+    assert not p.matches_auto_trigger(AUTO_RUN_SYNC)
+
+
+def test_from_dict_migrates_legacy_auto_run_single_trigger():
+    legacy = {"id": "abc", "name": "A", "auto_run": "shutdown"}
+    p = Preset.from_dict(legacy)
+    assert p.auto_run_triggers == [AUTO_RUN_SHUTDOWN]
+
+
+def test_from_dict_migrates_legacy_auto_run_off():
+    legacy = {"id": "abc", "name": "A", "auto_run": "off"}
+    p = Preset.from_dict(legacy)
+    assert p.auto_run_triggers == []
+
+
+def test_from_dict_prefers_auto_run_triggers_over_legacy_auto_run_if_both_present():
+    d = {"id": "abc", "name": "A", "auto_run": "startup", "auto_run_triggers": [AUTO_RUN_SYNC]}
+    p = Preset.from_dict(d)
+    assert p.auto_run_triggers == [AUTO_RUN_SYNC]
 
 
 def test_deck_link_roundtrip():

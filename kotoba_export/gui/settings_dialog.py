@@ -84,8 +84,9 @@ class SettingsDialog(QDialog):
         layout.addWidget(manage_decks_btn)
 
         auto_label = QLabel(
-            "<b>Automatic export</b> - runs presets set to \"On Anki startup/shutdown\" (in the "
-            "preset editor) unattended, uploading straight to Kotoba with no one there to click "
+            "<b>Automatic export</b> - runs presets with an \"Automatic export on\" box checked "
+            "(in the preset editor: Anki startup, Anki shutdown, and/or AnkiWeb sync finishing) "
+            "unattended, uploading straight to Kotoba with no one there to click "
             "Upload. Off by default; both this switch AND a preset's own setting must be on for "
             "anything to run automatically. Uses the session cookie above, same as manual uploads."
         )
