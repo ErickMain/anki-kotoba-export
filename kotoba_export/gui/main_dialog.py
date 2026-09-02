@@ -232,6 +232,17 @@ class MainDialog(QDialog):
             showInfo("That file has no presets in it.", parent=self)
             return
 
+        # An imported file is untrusted input (it may have been shared by
+        # someone else, not just a self-backup) - auto_run_triggers and
+        # deck_links are the two fields with real-world side effects
+        # (unattended uploads, which live Kotoba deck gets overwritten), so
+        # they're reset here rather than carried over verbatim. Everything
+        # else (filters, field mappings, instructions text) is safe to
+        # import as-is.
+        for preset in imported:
+            preset.auto_run_triggers = []
+            preset.deck_links = {}
+
         existing_ids = {p.id for p in load_presets(self.config)}
         for preset in imported:
             self.config = upsert_preset(self.config, preset)
@@ -243,7 +254,9 @@ class MainDialog(QDialog):
         showInfo(
             f"Imported {len(imported)} preset(s): {added} new, {updated} updated.\n\n"
             "Double-check note type and field mappings on each - they won't resolve if this "
-            "collection doesn't have the same note type/field names.",
+            "collection doesn't have the same note type/field names. Automatic-export triggers "
+            "and deck-overwrite links are never carried over by import - re-enable and re-run "
+            "each imported preset once to re-link its deck if you use those.",
             parent=self,
         )
 

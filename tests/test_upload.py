@@ -69,6 +69,49 @@ def test_upload_deck_falls_back_to_create_when_link_is_stale(monkeypatch):
     assert preset.get_deck_link("My Deck") == {"id": "fresh-id", "secret": "fresh-secret"}
 
 
+def test_upload_deck_propagates_non_stale_error_instead_of_falling_back_to_create(monkeypatch):
+    # A 400 (e.g. "duplicate question found") means the update itself was
+    # rejected - falling back to create_deck here would silently succeed
+    # against a brand-new deck and rebind the preset to it, hiding a real
+    # validation error instead of surfacing it.
+    calls = []
+
+    def fake_update(*a, **kw):
+        raise api.KotobaApiError("duplicate question found", status_code=400)
+
+    monkeypatch.setattr(api, "update_deck", fake_update)
+    monkeypatch.setattr(api, "create_deck", lambda *a, **kw: calls.append("create"))
+
+    preset = _preset("overwrite")
+    preset.set_deck_link("My Deck", "existing-id", "existing-secret")
+
+    try:
+        upload.upload_deck("cookie", preset, [], "My Deck")
+        assert False, "expected KotobaApiError"
+    except api.KotobaApiError as exc:
+        assert exc.status_code == 400
+
+    assert calls == []  # create_deck was never called
+    # The stale (but actually still valid) link is untouched.
+    assert preset.get_deck_link("My Deck") == {"id": "existing-id", "secret": "existing-secret"}
+
+
+def test_upload_deck_falls_back_to_create_when_link_secret_is_rejected(monkeypatch):
+    # 403 (secret rotated / no longer the owner) is also treated as stale,
+    # same as 404 (deck deleted).
+    monkeypatch.setattr(
+        api, "update_deck", lambda *a, **kw: (_ for _ in ()).throw(api.KotobaApiError("forbidden", status_code=403))
+    )
+    monkeypatch.setattr(api, "create_deck", lambda *a, **kw: {"id": "fresh-id", "readwrite_secret": "fresh-secret"})
+
+    preset = _preset("overwrite")
+    preset.set_deck_link("My Deck", "stale-id", "stale-secret")
+
+    result = upload.upload_deck("cookie", preset, [], "My Deck")
+
+    assert result == {"id": "fresh-id"}
+
+
 def test_upload_deck_propagates_error_when_create_fails(monkeypatch):
     def fake_create(*a, **kw):
         raise api.KotobaApiError("bad request", status_code=400)

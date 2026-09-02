@@ -28,6 +28,30 @@ def test_build_csv_joins_multiple_answers():
     assert "いく,ゆく" in csv_text
 
 
+def test_csv_safe_escapes_formula_trigger_characters():
+    for trigger in ("=", "+", "-", "@"):
+        assert kf.csv_safe(f"{trigger}cmd|'/bin/sh'!A1").startswith("'" + trigger)
+
+
+def test_csv_safe_leaves_normal_text_alone():
+    assert kf.csv_safe("普通のテキスト") == "普通のテキスト"
+    assert kf.csv_safe("") == ""
+
+
+def test_build_csv_escapes_formula_injection_in_every_free_text_field():
+    card = kf.KotobaCard(
+        question="=1+1",
+        answers=["+CMD"],
+        comment="-2+3",
+        instructions="@SUM(A1:A2)",
+    )
+    csv_text = kf.build_csv([card])
+    assert "'=1+1" in csv_text  # escaped, not written as a raw leading formula
+    assert "'+CMD" in csv_text
+    assert "'-2+3" in csv_text
+    assert "'@SUM(A1:A2)" in csv_text
+
+
 def test_validate_cards_flags_empty_question_and_answer():
     empty_question = kf.KotobaCard(question="", answers=["a"])
     empty_answer = kf.KotobaCard(question="q", answers=[])

@@ -37,10 +37,15 @@ def upload_deck(cookie: str, preset, cards: list, deck_name: str, max_retries: i
             )
             preset.set_deck_link(deck_name, link["id"], resp["readwrite_secret"])
             return {"id": link["id"]}
-        except kotoba_api.KotobaApiError:
-            # Stale link (deck deleted / secret rotated on Kotoba's side) -
-            # fall through to creating a fresh deck under this same name.
-            pass
+        except kotoba_api.KotobaApiError as exc:
+            # Only a stale link (deck deleted, or the stored secret no
+            # longer matches) should fall through to creating a fresh deck.
+            # Anything else - e.g. a 400 validation rejection like "duplicate
+            # question found" - must propagate, or it would silently succeed
+            # against a brand-new deck instead of surfacing the real error,
+            # silently rebinding the preset to that new deck in the process.
+            if exc.status_code not in (403, 404):
+                raise
 
     resp = kotoba_api.create_deck(
         cookie, deck_name, short_name, cards, description=preset.deck_description, max_retries=max_retries

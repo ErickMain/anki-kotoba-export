@@ -39,6 +39,21 @@ _QUESTION_MAX_LENGTH_BY_STRATEGY = {
 
 _SHORT_NAME_DISALLOWED_RE = re.compile(r"[^a-z0-9_]+")
 
+_CSV_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@")
+
+
+def csv_safe(value: str) -> str:
+    """Prefixes a leading =, +, -, or @ with an apostrophe so spreadsheet
+    apps (Excel, Google Sheets) open the cell as text instead of running it
+    as a formula. Kotoba card text is free-form (ultimately from Anki note
+    fields, or via import - see presets.py), and both this module's CSV and
+    history.py's History -> Export to CSV are explicitly meant to be opened
+    in a spreadsheet (see README).
+    """
+    if value and value[0] in _CSV_FORMULA_TRIGGER_CHARS:
+        return "'" + value
+    return value
+
 
 @dataclass
 class KotobaCard:
@@ -196,10 +211,10 @@ def build_csv(cards: list) -> str:
     for card in cards:
         writer.writerow(
             [
-                card.question,
-                card.answers_joined(),
-                card.comment,
-                card.instructions,
+                csv_safe(card.question),
+                csv_safe(card.answers_joined()),
+                csv_safe(card.comment),
+                csv_safe(card.instructions),
                 card.render_as,
             ]
         )

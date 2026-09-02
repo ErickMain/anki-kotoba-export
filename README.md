@@ -13,6 +13,14 @@ Kotoba's backend only supports login via Discord OAuth2 + a browser session cook
 
 ## Install
 
+Requires Anki 2.1.50+ on a **Qt6** build. Anki 2.1.50 shipped separate Qt5
+and Qt6 packaged builds side by side, and this add-on uses Qt6-only enum
+syntax throughout its dialogs (e.g. `Qt.ItemFlag.ItemIsUserCheckable`) -
+Anki's PyQt5-compatibility shims don't cover that direction, so it will
+fail to open any dialog on a Qt5 build even though its version number
+qualifies. If in doubt, install a recent Anki release (Qt6 has been the
+default packaged build for a long time).
+
 **From a release (recommended for a second machine):** download the `.ankiaddon` from the [latest release](https://github.com/ErickMain/anki-kotoba-export/releases/latest), then in Anki: Tools -> Add-ons -> Install from file.
 
 **From source (development):**

@@ -34,6 +34,40 @@ def test_normalize_cookie_header_empty():
     assert api.normalize_cookie_header("") == ""
 
 
+def test_normalize_cookie_header_rejects_embedded_crlf():
+    # Passing this straight to `requests` would raise InvalidHeader with the
+    # raw cookie value embedded in its message - reject it here first, with
+    # a static message, so a malformed cookie can never leak into a
+    # displayed/logged error.
+    try:
+        api.normalize_cookie_header("connect.sid=abc\r\nX-Injected: evil")
+        assert False, "expected KotobaApiError"
+    except api.KotobaApiError as exc:
+        assert "abc" not in str(exc)
+        assert "Injected" not in str(exc)
+
+
+def test_normalize_cookie_header_rejects_embedded_bare_newline():
+    try:
+        api.normalize_cookie_header("connect.sid=abc\nX-Injected: evil")
+        assert False, "expected KotobaApiError"
+    except api.KotobaApiError:
+        pass
+
+
+def test_headers_surfaces_crlf_cookie_as_kotoba_api_error(monkeypatch):
+    # End-to-end: a malformed cookie must never reach requests.* at all.
+    called = []
+    monkeypatch.setattr(api.requests, "get", lambda *a, **kw: called.append(1))
+
+    try:
+        api.list_my_decks("connect.sid=abc\r\nX-Injected: evil")
+        assert False, "expected KotobaApiError"
+    except api.KotobaApiError:
+        pass
+    assert called == []
+
+
 def test_extract_error_detail_prefers_kotoba_rejection_reason():
     resp = FakeResponse(
         json_data={

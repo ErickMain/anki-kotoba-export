@@ -86,6 +86,17 @@ def test_history_to_csv_includes_detail_and_quotes_commas():
     assert '"timed out, retry later"' in csv_text
 
 
+def test_history_to_csv_escapes_formula_injection_in_free_text_fields():
+    entry = history.new_entry(
+        "=cmd|'/bin/sh'!A1", "+Deck", 1, history.OUTCOME_ERROR, detail="-2+3"
+    )
+    csv_text = history.history_to_csv([entry])
+
+    assert "'=cmd" in csv_text
+    assert "'+Deck" in csv_text
+    assert "'-2+3" in csv_text
+
+
 def test_history_to_csv_empty_list_is_header_only():
     csv_text = history.history_to_csv([])
     assert csv_text.strip() == "Timestamp,Preset,Deck,Cards,Outcome,Trigger,Duration (s),Detail"

@@ -54,7 +54,22 @@ def _run_auto_presets(trigger: str):
     cookie = adv.get("session_cookie", "")
     ready = bool(adv.get("auto_export_enabled") and adv.get("direct_api_enabled") and cookie.strip())
 
-    presets = [p for p in load_presets(config) if p.matches_auto_trigger(trigger)]
+    try:
+        presets = [p for p in load_presets(config) if p.matches_auto_trigger(trigger)]
+    except Exception as exc:  # noqa: BLE001 - see docstring: this must never raise
+        config = history.append_entry(
+            config,
+            history.new_entry(
+                "",
+                "",
+                0,
+                history.OUTCOME_ERROR,
+                trigger,
+                detail=f"Could not load presets (config may be corrupted): {exc}",
+            ),
+        )
+        config_store.save_config(config)
+        return
     if not presets:
         return
 
@@ -111,6 +126,18 @@ def _run_auto_presets(trigger: str):
                 cookie, preset, result.cards, result.deck_name, max_retries=AUTO_EXPORT_MAX_RETRIES
             )
             config = upsert_preset(config, preset)  # persists the updated deck_links
+            # Uploaded successfully, but validate_cards may still have flagged
+            # things Kotoba silently truncates/skips rather than rejects
+            # outright (e.g. an oversized comment). The preview dialog shows
+            # these for a manual run; there's no dialog here, so they'd
+            # otherwise go unseen - fold a summary into the history detail
+            # instead.
+            detail = ""
+            if result.warnings:
+                shown = result.warnings[:3]
+                detail = f"{len(result.warnings)} warning(s): " + "; ".join(shown)
+                if len(result.warnings) > len(shown):
+                    detail += f" (+{len(result.warnings) - len(shown)} more)"
             config = history.append_entry(
                 config,
                 history.new_entry(
@@ -119,6 +146,7 @@ def _run_auto_presets(trigger: str):
                     len(result.cards),
                     history.OUTCOME_UPLOADED,
                     trigger,
+                    detail=detail,
                     duration_seconds=time.perf_counter() - start,
                 ),
             )

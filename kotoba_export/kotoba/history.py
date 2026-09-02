@@ -9,6 +9,8 @@ import io
 from dataclasses import asdict, dataclass
 from datetime import datetime
 
+from . import format as kotoba_format
+
 MAX_ENTRIES = 200
 
 OUTCOME_COPIED = "copied"
@@ -111,13 +113,13 @@ def history_to_csv(entries: list) -> str:
         writer.writerow(
             [
                 entry.timestamp,
-                entry.preset_name,
-                entry.deck_name,
+                kotoba_format.csv_safe(entry.preset_name),
+                kotoba_format.csv_safe(entry.deck_name),
                 entry.card_count,
                 entry.outcome,
                 entry.triggered_by,
                 entry.duration_seconds,
-                entry.detail,
+                kotoba_format.csv_safe(entry.detail),
             ]
         )
     return buf.getvalue()

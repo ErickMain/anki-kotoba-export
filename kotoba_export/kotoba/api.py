@@ -50,8 +50,21 @@ def normalize_cookie_header(raw: str) -> str:
     grab the value). A bare value has no `=` in it, so we assume it's
     `connect.sid`, Express-session's default cookie name and the one
     Kotoba's own login actually uses.
+
+    Raises KotobaApiError (not a generic ValueError - callers already know
+    how to surface that type) if the value contains a line break: passing
+    that straight to `requests` raises InvalidHeader with the raw header
+    text embedded in its message, which would otherwise leak the cookie
+    into a logged/displayed error. Rejecting it here, before any request is
+    attempted, also avoids wasting retries on what is always a permanent,
+    not transient, failure.
     """
     raw = raw.strip()
+    if "\r" in raw or "\n" in raw:
+        raise KotobaApiError(
+            "The session cookie contains a line break, which isn't valid in a Cookie header. "
+            "Copy it fresh from DevTools' Headers tab (not the Cookies table) and try again."
+        )
     if raw and "=" not in raw:
         return f"connect.sid={raw}"
     return raw
