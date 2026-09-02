@@ -4,6 +4,7 @@ invoked from the Anki Browser.
 """
 from aqt import mw
 from aqt.qt import (
+    QAbstractItemView,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -48,11 +49,16 @@ class MainDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self.preset_list = QListWidget()
+        self.preset_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.preset_list.itemDoubleClicked.connect(self._edit_selected)
         layout.addWidget(self.preset_list)
 
         btn_row = QHBoxLayout()
         run_btn = QPushButton("Run")
+        run_btn.setToolTip(
+            "Ctrl+click or Shift+click to select more than one preset - each runs in turn, "
+            "with its own preview, so one click covers your whole daily routine."
+        )
         run_btn.clicked.connect(self._run_selected)
         btn_row.addWidget(run_btn)
 
@@ -110,6 +116,13 @@ class MainDialog(QDialog):
             return None
         return presets[row]
 
+    def _selected_presets(self):
+        """All presets the user has highlighted (ctrl/shift-click), in list
+        order rather than click order - used by Run for batching."""
+        presets = load_presets(self.config)
+        rows = sorted({idx.row() for idx in self.preset_list.selectedIndexes()})
+        return [presets[r] for r in rows if 0 <= r < len(presets)]
+
     def _advanced_enabled(self) -> bool:
         return bool(self.config.get("advanced", {}).get("direct_api_enabled"))
 
@@ -160,11 +173,13 @@ class MainDialog(QDialog):
         self._reload_list()
 
     def _run_selected(self):
-        preset = self._selected_preset()
-        if not preset:
+        presets = self._selected_presets()
+        if not presets:
             showWarning("Select a preset first.", parent=self)
             return
-        self._run_preset(preset, persist_updates=True)
+        for i, preset in enumerate(presets, start=1):
+            suffix = f" ({i} of {len(presets)})" if len(presets) > 1 else ""
+            self._run_preset(preset, persist_updates=True, title_suffix=suffix)
 
     def _open_settings(self):
         dlg = SettingsDialog(self, self.config)
@@ -218,14 +233,14 @@ class MainDialog(QDialog):
             parent=self,
         )
 
-    def _run_preset(self, preset, persist_updates: bool):
+    def _run_preset(self, preset, persist_updates: bool, title_suffix: str = ""):
         if not export_mod.build_query_for_preset(preset).strip():
             if (
                 QMessageBox.question(
                     self,
                     "No filters set",
-                    "This preset has no search filters (no state/tag/advanced query), so it "
-                    "matches your entire collection. Continue anyway?",
+                    f'"{preset.name}" has no search filters (no state/tag/advanced query), so '
+                    "it matches your entire collection. Continue anyway?",
                 )
                 != QMessageBox.StandardButton.Yes
             ):
@@ -233,7 +248,7 @@ class MainDialog(QDialog):
 
         result = export_mod.build_cards_for_preset(mw.col, preset)
         if not result.cards:
-            showInfo("No matching cards found for this preset.", parent=self)
+            showInfo(f'No matching cards found for "{preset.name}".', parent=self)
             return
 
         def on_preset_updated(updated_preset):
@@ -243,6 +258,8 @@ class MainDialog(QDialog):
             config_store.save_config(self.config)
 
         dlg = PreviewDialog(self, result, preset, self.config, on_preset_updated=on_preset_updated)
+        if title_suffix:
+            dlg.setWindowTitle(dlg.windowTitle() + title_suffix)
         dlg.exec()
 
     # -- ad-hoc (invoked from the Browser) -----------------------------------

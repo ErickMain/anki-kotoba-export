@@ -4,16 +4,15 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
 
 ## Bigger / optional
 
-- **"Run all" / one-click daily routine.** Fire off several presets (e.g.
-  forgotten today + due + leeches) in one action instead of one at a time.
 - **Scheduled/automatic export.** Run a preset automatically on Anki
   startup/shutdown or on a timer, no manual Tools-menu trip.
 - **Export history log.** A small local record of past runs (deck name,
   card count, timestamp, success/fail) to track the habit over time and
   spot a run that silently produced 0 cards.
 - **Retry/backoff for the direct API.** Kotoba rate-limits POST/PATCH
-  (`postPatchLimiter`); matters more once "run all" exists and fires several
-  uploads back to back.
+  (`postPatchLimiter`). No longer hypothetical now that "run all" exists and
+  can fire several uploads back to back in one sitting - worth picking up
+  next if a batch run ever hits a 429.
 
 ## Low priority - only if it turns out to matter
 
@@ -38,7 +37,9 @@ for tweaking before it's saved), smarter comment formatting (line break
 before a recognized dictionary-source marker like "(大辞林 第四版)" or
 "(JMdict)", verified against real mined data with no false positives on
 incidental parens like "(cannot)" - confirmed rendering as real line breaks
-in Discord), `.ankiaddon` packaging, GitHub repo with tagged releases
+in Discord), "run all" (multi-select the preset list, ctrl/shift-click, and
+Run fires each one's preview in turn - e.g. forgotten today + due + leeches
+in one action), `.ankiaddon` packaging, GitHub repo with tagged releases
 carrying the packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
