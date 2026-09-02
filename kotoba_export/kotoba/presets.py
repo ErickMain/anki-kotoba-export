@@ -16,6 +16,11 @@ DEFAULT_DECK_NAME_TEMPLATE = "{preset_name} - {date}"
 REUSE_NEW_EACH_TIME = "new_each_time"
 REUSE_OVERWRITE = "overwrite"
 
+AUTO_RUN_OFF = "off"
+AUTO_RUN_STARTUP = "startup"
+AUTO_RUN_SHUTDOWN = "shutdown"
+AUTO_RUN_BOTH = "both"
+
 
 def _migrate_legacy_note_type_fields(d: dict) -> dict:
     """Presets saved before multi-note-type support stored a single
@@ -89,6 +94,13 @@ class Preset:
     # getting replaced.
     deck_reuse_mode: str = REUSE_NEW_EACH_TIME
 
+    # "off"/"startup"/"shutdown"/"both": runs this preset unattended via
+    # direct-API upload (there's no one there to click Copy/Upload) when
+    # Anki opens and/or closes the profile. Requires advanced mode AND the
+    # global auto-export switch (config["advanced"]["auto_export_enabled"])
+    # to both be on - this field alone does not enable anything.
+    auto_run: str = "off"
+
     # deck_links: {rendered_deck_name: {"id": ..., "secret": ...}},
     # populated after a successful direct-API export in overwrite mode so a
     # later run with that same name knows which Kotoba deck to PATCH.
@@ -111,6 +123,12 @@ class Preset:
         data["name"] = new_name if new_name is not None else f"{self.name} (copy)"
         data["deck_links"] = {}
         return Preset.from_dict(data)
+
+    def matches_auto_trigger(self, trigger: str) -> bool:
+        """trigger: AUTO_RUN_STARTUP or AUTO_RUN_SHUTDOWN. True if this
+        preset should run unattended for that trigger (auto_run is exactly
+        that trigger, or AUTO_RUN_BOTH)."""
+        return self.auto_run in (trigger, AUTO_RUN_BOTH)
 
     def get_deck_link(self, deck_name: str):
         """Returns {"id": ..., "secret": ...} for a previously-uploaded deck

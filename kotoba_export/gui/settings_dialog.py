@@ -10,7 +10,9 @@ from aqt.qt import (
     QLineEdit,
     QPushButton,
     Qt,
+    QScrollArea,
     QVBoxLayout,
+    QWidget,
 )
 from aqt.utils import showInfo, showWarning
 
@@ -39,12 +41,23 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.config = config
         self.setWindowTitle("Kotoba Export Settings")
-        self.resize(480, 320)
+        self.resize(480, 480)
         self._build_ui()
         self._load()
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        # Same reasoning as the preset editor: this dialog has grown past a
+        # fixed size on smaller screens. Save/Cancel stay outside the scroll
+        # area so they (and everything above them) are always reachable.
+        outer = QVBoxLayout(self)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        content = QWidget()
+        scroll_area.setWidget(content)
+        outer.addWidget(scroll_area)
+
+        layout = QVBoxLayout(content)
 
         warning = QLabel(WARNING_TEXT)
         warning.setWordWrap(True)
@@ -70,17 +83,30 @@ class SettingsDialog(QDialog):
         manage_decks_btn.clicked.connect(self._open_deck_manager)
         layout.addWidget(manage_decks_btn)
 
+        auto_label = QLabel(
+            "<b>Automatic export</b> - runs presets set to \"On Anki startup/shutdown\" (in the "
+            "preset editor) unattended, uploading straight to Kotoba with no one there to click "
+            "Upload. Off by default; both this switch AND a preset's own setting must be on for "
+            "anything to run automatically. Uses the session cookie above, same as manual uploads."
+        )
+        auto_label.setWordWrap(True)
+        layout.addWidget(auto_label)
+
+        self.auto_export_check = QCheckBox("Enable automatic export")
+        layout.addWidget(self.auto_export_check)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        outer.addWidget(buttons)  # outside the scroll area - always visible
 
     def _load(self):
         adv = self.config.get("advanced", {})
         self.enabled_check.setChecked(bool(adv.get("direct_api_enabled")))
         self.cookie_edit.setText(adv.get("session_cookie", ""))
+        self.auto_export_check.setChecked(bool(adv.get("auto_export_enabled")))
 
     def _test_connection(self):
         cookie = self.cookie_edit.text().strip()
@@ -109,4 +135,5 @@ class SettingsDialog(QDialog):
         self.config.setdefault("advanced", {})
         self.config["advanced"]["direct_api_enabled"] = self.enabled_check.isChecked()
         self.config["advanced"]["session_cookie"] = self.cookie_edit.text().strip()
+        self.config["advanced"]["auto_export_enabled"] = self.auto_export_check.isChecked()
         self.accept()

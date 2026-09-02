@@ -4,15 +4,10 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
 
 ## Bigger / optional
 
-- **Scheduled/automatic export.** Run a preset automatically on Anki
-  startup/shutdown or on a timer, no manual Tools-menu trip.
-- **Export history log.** A small local record of past runs (deck name,
-  card count, timestamp, success/fail) to track the habit over time and
-  spot a run that silently produced 0 cards.
 - **Retry/backoff for the direct API.** Kotoba rate-limits POST/PATCH
-  (`postPatchLimiter`). No longer hypothetical now that "run all" exists and
-  can fire several uploads back to back in one sitting - worth picking up
-  next if a batch run ever hits a 429.
+  (`postPatchLimiter`). No longer hypothetical now that "run all" and
+  automatic startup/shutdown export both exist and can fire several uploads
+  back to back - worth picking up next if a run ever hits a 429.
 
 ## Low priority - only if it turns out to matter
 
@@ -39,8 +34,15 @@ before a recognized dictionary-source marker like "(大辞林 第四版)" or
 incidental parens like "(cannot)" - confirmed rendering as real line breaks
 in Discord), "run all" (multi-select the preset list, ctrl/shift-click, and
 Run fires each one's preview in turn - e.g. forgotten today + due + leeches
-in one action), `.ankiaddon` packaging, GitHub repo with tagged releases
-carrying the packaged addon
+in one action), export history log (main dialog -> History..., a capped
+log of every export - manual and automatic - with preset/deck/card
+count/outcome/trigger), scheduled/automatic export (per-preset "Automatic
+export: startup/shutdown/both", gated by a global switch in Advanced
+settings so nothing runs unless both are explicitly on; unattended runs
+always go through direct-API upload and log to history even when skipped,
+so a misconfiguration is visible instead of silent; verified end-to-end
+against a real Anki restart, both triggers), `.ankiaddon` packaging, GitHub
+repo with tagged releases carrying the packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 
@@ -51,3 +53,14 @@ first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases
    `kotoba_export/`, then `Compress-Archive -Path .\kotoba_export\* -DestinationPath .\kotoba_export-<version>.ankiaddon`.
 3. Commit, `git tag -a v<version> -m "v<version>"`, `git push origin main --tags`.
 4. `gh release create v<version> .\kotoba_export-<version>.ankiaddon --title "..." --notes "..."`.
+
+### Development note
+
+`preset_editor.py` and `settings_dialog.py` both eventually grew past a
+fixed `resize()` height on a smaller screen, cutting off Save/Cancel (or a
+checkbox right above them) with no obvious sign anything was missing - hit
+twice, cost a debugging session the second time. Both now wrap their
+content in a `QScrollArea`, with Save/Cancel outside it so they're always
+reachable. Any dialog that keeps gaining fields over time (rather than
+staying fixed-purpose, like `note_type_mapping_dialog.py`) should get the
+same treatment before it becomes a problem, not after.

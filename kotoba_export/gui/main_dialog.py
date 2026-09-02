@@ -18,6 +18,7 @@ from aqt.utils import showInfo, showWarning, tooltip
 
 from .. import config_store
 from ..kotoba import export as export_mod
+from ..kotoba import history
 from ..kotoba.presets import (
     Preset,
     delete_preset,
@@ -26,6 +27,7 @@ from ..kotoba.presets import (
     presets_to_json,
     upsert_preset,
 )
+from .history_dialog import HistoryDialog
 from .preset_editor import PresetEditorDialog
 from .preview_dialog import PreviewDialog
 from .settings_dialog import SettingsDialog
@@ -37,7 +39,7 @@ class MainDialog(QDialog):
         self.config = config_store.get_config()
         self.ad_hoc_note_ids = ad_hoc_note_ids
         self.setWindowTitle("Kotoba Export")
-        self.resize(420, 380)
+        self.resize(420, 440)
         self._build_ui()
         self._reload_list()
 
@@ -80,9 +82,16 @@ class MainDialog(QDialog):
         btn_row.addWidget(delete_btn)
         layout.addLayout(btn_row)
 
+        bottom_row = QHBoxLayout()
         settings_btn = QPushButton("Advanced settings...")
         settings_btn.clicked.connect(self._open_settings)
-        layout.addWidget(settings_btn)
+        bottom_row.addWidget(settings_btn)
+
+        history_btn = QPushButton("History...")
+        history_btn.setToolTip("See past export runs, including automatic ones you weren't watching for.")
+        history_btn.clicked.connect(self._open_history)
+        bottom_row.addWidget(history_btn)
+        layout.addLayout(bottom_row)
 
         io_row = QHBoxLayout()
         export_btn = QPushButton("Export presets...")
@@ -186,6 +195,9 @@ class MainDialog(QDialog):
         if dlg.exec():
             config_store.save_config(self.config)
 
+    def _open_history(self):
+        HistoryDialog(self, self.config).exec()
+
     def _export_presets(self):
         presets = load_presets(self.config)
         if not presets:
@@ -233,7 +245,7 @@ class MainDialog(QDialog):
             parent=self,
         )
 
-    def _run_preset(self, preset, persist_updates: bool, title_suffix: str = ""):
+    def _run_preset(self, preset, persist_updates: bool, title_suffix: str = "", triggered_by: str = history.TRIGGER_MANUAL):
         if not export_mod.build_query_for_preset(preset).strip():
             if (
                 QMessageBox.question(
@@ -248,6 +260,11 @@ class MainDialog(QDialog):
 
         result = export_mod.build_cards_for_preset(mw.col, preset)
         if not result.cards:
+            self.config = history.append_entry(
+                self.config,
+                history.new_entry(preset.name, result.deck_name, 0, history.OUTCOME_NO_CARDS, triggered_by),
+            )
+            config_store.save_config(self.config)
             showInfo(f'No matching cards found for "{preset.name}".', parent=self)
             return
 
@@ -257,7 +274,9 @@ class MainDialog(QDialog):
             self.config = upsert_preset(self.config, updated_preset)
             config_store.save_config(self.config)
 
-        dlg = PreviewDialog(self, result, preset, self.config, on_preset_updated=on_preset_updated)
+        dlg = PreviewDialog(
+            self, result, preset, self.config, on_preset_updated=on_preset_updated, triggered_by=triggered_by
+        )
         if title_suffix:
             dlg.setWindowTitle(dlg.windowTitle() + title_suffix)
         dlg.exec()

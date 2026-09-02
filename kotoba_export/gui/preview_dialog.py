@@ -24,19 +24,23 @@ from aqt.qt import (
 )
 from aqt.utils import openLink, showInfo, showWarning, tooltip
 
+from .. import config_store
 from ..kotoba import api as kotoba_api
 from ..kotoba import format as kotoba_format
+from ..kotoba import history
+from ..kotoba import upload as upload_mod
 
 KOTOBA_DASHBOARD_URL = "https://kotobaweb.com/dashboard"
 
 
 class PreviewDialog(QDialog):
-    def __init__(self, parent, result, preset, config: dict, on_preset_updated=None):
+    def __init__(self, parent, result, preset, config: dict, on_preset_updated=None, triggered_by=history.TRIGGER_MANUAL):
         super().__init__(parent)
         self.result = result
         self.preset = preset
         self.config = config
         self.on_preset_updated = on_preset_updated
+        self.triggered_by = triggered_by
 
         self.setWindowTitle(f"Kotoba Export - {preset.name}")
         self.resize(760, 520)
@@ -129,9 +133,22 @@ class PreviewDialog(QDialog):
     def _csv_text(self) -> str:
         return kotoba_format.build_csv(self.result.cards)
 
+    def _log_history(self, outcome: str, deck_name: str, detail: str = ""):
+        entry = history.new_entry(
+            preset_name=self.preset.name,
+            deck_name=deck_name,
+            card_count=len(self.result.cards),
+            outcome=outcome,
+            triggered_by=self.triggered_by,
+            detail=detail,
+        )
+        history.append_entry(self.config, entry)
+        config_store.save_config(self.config)
+
     def _copy_and_open(self):
         QApplication.clipboard().setText(self._csv_text())
         openLink(KOTOBA_DASHBOARD_URL)
+        self._log_history(history.OUTCOME_COPIED, self.deck_name_edit.text().strip() or self.result.deck_name)
         showInfo(
             "CSV copied to your clipboard and kotobaweb.com opened in your browser.\n\n"
             f"In Kotoba: New Custom Deck -> name it \"{self.deck_name_edit.text()}\" -> "
@@ -147,54 +164,18 @@ class PreviewDialog(QDialog):
             return
         with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(self._csv_text())
+        self._log_history(history.OUTCOME_SAVED, self.deck_name_edit.text().strip() or self.result.deck_name, detail=path)
         tooltip(f"Saved to {path}", parent=self)
 
     def _upload_direct(self):
         cookie = self.config.get("advanced", {}).get("session_cookie", "")
         deck_name = self.deck_name_edit.text().strip() or self.result.deck_name
-        short_name = kotoba_format.make_short_name(deck_name)
-        overwrite = self.preset.deck_reuse_mode == "overwrite"
-        # Linked by the exact rendered name: reusing the same name overwrites
-        # that deck; typing a different name here creates a separate one.
-        link = self.preset.get_deck_link(deck_name) if overwrite else None
 
         self.setCursor(QCursor(Qt.CursorShape.WaitCursor))
         try:
-            if link:
-                try:
-                    resp = kotoba_api.update_deck(
-                        cookie,
-                        link["id"],
-                        link["secret"],
-                        deck_name,
-                        short_name,
-                        self.result.cards,
-                        description=self.preset.deck_description,
-                    )
-                    self.preset.set_deck_link(deck_name, link["id"], resp["readwrite_secret"])
-                except kotoba_api.KotobaApiError:
-                    # The link is stale (deck deleted / secret rotated on
-                    # Kotoba's side) - fall back to creating a fresh deck
-                    # under this same name.
-                    resp = kotoba_api.create_deck(
-                        cookie,
-                        deck_name,
-                        short_name,
-                        self.result.cards,
-                        description=self.preset.deck_description,
-                    )
-                    self.preset.set_deck_link(deck_name, resp["id"], resp["readwrite_secret"])
-            else:
-                resp = kotoba_api.create_deck(
-                    cookie,
-                    deck_name,
-                    short_name,
-                    self.result.cards,
-                    description=self.preset.deck_description,
-                )
-                if overwrite:
-                    self.preset.set_deck_link(deck_name, resp["id"], resp["readwrite_secret"])
+            upload_mod.upload_deck(cookie, self.preset, self.result.cards, deck_name)
         except kotoba_api.KotobaApiError as exc:
+            self._log_history(history.OUTCOME_ERROR, deck_name, detail=str(exc))
             showWarning(str(exc), parent=self)
             return
         finally:
@@ -202,6 +183,7 @@ class PreviewDialog(QDialog):
 
         if self.on_preset_updated:
             self.on_preset_updated(self.preset)
+        self._log_history(history.OUTCOME_UPLOADED, deck_name)
 
         showInfo(
             f"Uploaded to Kotoba as \"{deck_name}\".",

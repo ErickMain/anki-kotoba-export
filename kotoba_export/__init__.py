@@ -4,9 +4,14 @@ reading!" custom decks, with saved presets for recurring study sessions
 """
 from aqt import gui_hooks, mw
 from aqt.qt import QAction
-from aqt.utils import showInfo
+from aqt.utils import showInfo, tooltip
 
+from . import config_store
 from .gui.main_dialog import MainDialog
+from .kotoba import export as export_mod
+from .kotoba import history
+from .kotoba import upload as upload_mod
+from .kotoba.presets import load_presets, upsert_preset
 
 
 def _open_main_dialog():
@@ -27,12 +32,89 @@ def _on_browser_menus_did_init(browser):
     browser.form.menu_Notes.addAction(action)
 
 
+def _run_auto_presets(trigger: str):
+    """Unattended export for presets with auto_run set to `trigger` (or
+    "both"). Runs on Anki startup/shutdown, so this must never show a
+    dialog or raise - anything unexpected gets logged to history instead
+    and the loop moves on, so one bad preset can't hang or crash Anki's own
+    startup/shutdown sequence.
+    """
+    config = config_store.get_config()
+    adv = config.get("advanced", {})
+    cookie = adv.get("session_cookie", "")
+    ready = bool(adv.get("auto_export_enabled") and adv.get("direct_api_enabled") and cookie.strip())
+
+    presets = [p for p in load_presets(config) if p.matches_auto_trigger(trigger)]
+    if not presets:
+        return
+
+    uploaded = 0
+    for preset in presets:
+        if not ready:
+            config = history.append_entry(
+                config,
+                history.new_entry(
+                    preset.name,
+                    "",
+                    0,
+                    history.OUTCOME_SKIPPED,
+                    trigger,
+                    detail="Automatic export is off, or advanced mode/session cookie isn't configured.",
+                ),
+            )
+            continue
+
+        try:
+            query = export_mod.build_query_for_preset(preset)
+            if not query.strip():
+                config = history.append_entry(
+                    config,
+                    history.new_entry(
+                        preset.name,
+                        "",
+                        0,
+                        history.OUTCOME_SKIPPED,
+                        trigger,
+                        detail="No search filters set - would match the whole collection, skipped for safety.",
+                    ),
+                )
+                continue
+
+            result = export_mod.build_cards_for_preset(mw.col, preset)
+            if not result.cards:
+                config = history.append_entry(
+                    config,
+                    history.new_entry(preset.name, result.deck_name, 0, history.OUTCOME_NO_CARDS, trigger),
+                )
+                continue
+
+            upload_mod.upload_deck(cookie, preset, result.cards, result.deck_name)
+            config = upsert_preset(config, preset)  # persists the updated deck_links
+            config = history.append_entry(
+                config,
+                history.new_entry(
+                    preset.name, result.deck_name, len(result.cards), history.OUTCOME_UPLOADED, trigger
+                ),
+            )
+            uploaded += 1
+        except Exception as exc:  # noqa: BLE001 - see docstring
+            config = history.append_entry(
+                config, history.new_entry(preset.name, "", 0, history.OUTCOME_ERROR, trigger, detail=str(exc))
+            )
+
+    config_store.save_config(config)
+    if uploaded:
+        tooltip(f"Kotoba Export: automatically uploaded {uploaded} deck(s) on {trigger}.")
+
+
 def _setup():
     tools_action = QAction("Kotoba Export...", mw)
     tools_action.triggered.connect(_open_main_dialog)
     mw.form.menuTools.addAction(tools_action)
 
     gui_hooks.browser_menus_did_init.append(_on_browser_menus_did_init)
+    gui_hooks.profile_did_open.append(lambda: _run_auto_presets(history.TRIGGER_AUTO_STARTUP))
+    gui_hooks.profile_will_close.append(lambda: _run_auto_presets(history.TRIGGER_AUTO_SHUTDOWN))
 
 
 _setup()

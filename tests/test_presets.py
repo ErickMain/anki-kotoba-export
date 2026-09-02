@@ -1,6 +1,38 @@
 import pytest
 
-from kotoba.presets import Preset, load_presets, presets_from_json, presets_to_json, save_presets, upsert_preset
+from kotoba.presets import (
+    AUTO_RUN_BOTH,
+    AUTO_RUN_OFF,
+    AUTO_RUN_SHUTDOWN,
+    AUTO_RUN_STARTUP,
+    Preset,
+    load_presets,
+    presets_from_json,
+    presets_to_json,
+    save_presets,
+    upsert_preset,
+)
+
+
+def test_auto_run_defaults_to_off():
+    p = Preset.new("A")
+    assert p.auto_run == AUTO_RUN_OFF
+    assert not p.matches_auto_trigger(AUTO_RUN_STARTUP)
+    assert not p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
+
+
+def test_matches_auto_trigger_for_a_specific_trigger():
+    p = Preset.new("A")
+    p.auto_run = AUTO_RUN_STARTUP
+    assert p.matches_auto_trigger(AUTO_RUN_STARTUP)
+    assert not p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
+
+
+def test_matches_auto_trigger_both_matches_either():
+    p = Preset.new("A")
+    p.auto_run = AUTO_RUN_BOTH
+    assert p.matches_auto_trigger(AUTO_RUN_STARTUP)
+    assert p.matches_auto_trigger(AUTO_RUN_SHUTDOWN)
 
 
 def test_deck_link_roundtrip():

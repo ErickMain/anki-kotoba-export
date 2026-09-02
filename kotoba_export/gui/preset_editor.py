@@ -16,13 +16,23 @@ from aqt.qt import (
     QListWidgetItem,
     Qt,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 from aqt.utils import showWarning
 
 from ..kotoba import format as kotoba_format
-from ..kotoba.presets import REUSE_NEW_EACH_TIME, REUSE_OVERWRITE, Preset
+from ..kotoba.presets import (
+    AUTO_RUN_BOTH,
+    AUTO_RUN_OFF,
+    AUTO_RUN_SHUTDOWN,
+    AUTO_RUN_STARTUP,
+    REUSE_NEW_EACH_TIME,
+    REUSE_OVERWRITE,
+    Preset,
+)
 from .note_type_mapping_dialog import NoteTypeMappingDialog
 
 _SOURCE_OPTIONS = [
@@ -53,13 +63,25 @@ class PresetEditorDialog(QDialog):
         self.advanced_enabled = advanced_enabled
         self._note_type_mappings = {}  # working copy, written back to the preset on Save
         self.setWindowTitle("Kotoba Export Preset")
-        self.resize(480, 680)
+        self.resize(520, 620)
         self._build_ui()
         self._load_preset()
 
     # -- UI construction -----------------------------------------------
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        # This dialog has grown a lot of fields over time - a plain fixed
+        # layout stopped fitting on smaller/laptop screens, cutting off the
+        # Save button. Everything except Save/Cancel scrolls; those two stay
+        # pinned at the bottom so they're always reachable.
+        outer = QVBoxLayout(self)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        content = QWidget()
+        scroll_area.setWidget(content)
+        outer.addWidget(scroll_area)
+
+        layout = QVBoxLayout(content)
 
         name_form = QFormLayout()
         layout.addLayout(name_form)
@@ -181,12 +203,29 @@ class PresetEditorDialog(QDialog):
             self.reuse_mode_combo.model().item(1).setEnabled(False)
         kotoba_form.addRow("Repeated runs:", self.reuse_mode_combo)
 
+        self.auto_run_combo = QComboBox()
+        self.auto_run_combo.addItem("Off - run manually only", AUTO_RUN_OFF)
+        self.auto_run_combo.addItem("On Anki startup", AUTO_RUN_STARTUP)
+        self.auto_run_combo.addItem("On Anki shutdown (may briefly delay closing)", AUTO_RUN_SHUTDOWN)
+        self.auto_run_combo.addItem("Both startup and shutdown", AUTO_RUN_BOTH)
+        self.auto_run_combo.setToolTip(
+            "Uploads this preset to Kotoba unattended, with no preview - only sensible for "
+            "advanced/direct-API mode, since there's no one there to click Copy/Upload. Also "
+            "needs \"Enable automatic export\" turned on in Advanced settings; this dropdown "
+            "alone does not start anything. \"Forgotten today\"-style presets belong on "
+            "shutdown, not startup - startup runs before you've reviewed anything that day."
+        )
+        if not self.advanced_enabled:
+            for i in range(1, self.auto_run_combo.count()):
+                self.auto_run_combo.model().item(i).setEnabled(False)
+        kotoba_form.addRow("Automatic export:", self.auto_run_combo)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        outer.addWidget(buttons)  # outside the scroll area - always visible, regardless of scroll position
 
     # -- note type mapping list ------------------------------------------
     def _refresh_note_type_list(self):
@@ -284,6 +323,10 @@ class PresetEditorDialog(QDialog):
         if idx >= 0 and (p.deck_reuse_mode != REUSE_OVERWRITE or self.advanced_enabled):
             self.reuse_mode_combo.setCurrentIndex(idx)
 
+        idx = self.auto_run_combo.findData(p.auto_run)
+        if idx >= 0 and (p.auto_run == AUTO_RUN_OFF or self.advanced_enabled):
+            self.auto_run_combo.setCurrentIndex(idx)
+
     def _on_save(self):
         name = self.name_edit.text().strip()
         if not name:
@@ -319,5 +362,6 @@ class PresetEditorDialog(QDialog):
         p.deck_name_template = self.deck_name_template_edit.text().strip() or "{preset_name} - {date}"
         p.deck_description = self.deck_description_edit.text().strip()
         p.deck_reuse_mode = self.reuse_mode_combo.currentData()
+        p.auto_run = self.auto_run_combo.currentData()
 
         self.accept()

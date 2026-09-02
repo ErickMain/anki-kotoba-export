@@ -1,0 +1,80 @@
+"""A small local record of past export runs - what got exported, when, and
+how it went - so you can tell at a glance whether an automatic run actually
+did anything, without having to remember to check. Stored in the same
+config dict as presets/settings, capped at MAX_ENTRIES so it stays "small".
+"""
+import dataclasses
+from dataclasses import asdict, dataclass
+from datetime import datetime
+
+MAX_ENTRIES = 200
+
+OUTCOME_COPIED = "copied"
+OUTCOME_SAVED = "saved"
+OUTCOME_UPLOADED = "uploaded"
+OUTCOME_NO_CARDS = "no_cards"
+OUTCOME_SKIPPED = "skipped"  # deliberately not run (e.g. unattended safety check failed)
+OUTCOME_ERROR = "error"
+
+TRIGGER_MANUAL = "manual"
+# Same string values as presets.AUTO_RUN_STARTUP/AUTO_RUN_SHUTDOWN on
+# purpose, so a trigger value can be passed straight into both
+# Preset.matches_auto_trigger() and history.new_entry() with no translation.
+TRIGGER_AUTO_STARTUP = "startup"
+TRIGGER_AUTO_SHUTDOWN = "shutdown"
+
+
+@dataclass
+class HistoryEntry:
+    timestamp: str
+    preset_name: str
+    deck_name: str
+    card_count: int
+    outcome: str
+    triggered_by: str = TRIGGER_MANUAL
+    detail: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @staticmethod
+    def from_dict(d: dict) -> "HistoryEntry":
+        known = {f.name for f in dataclasses.fields(HistoryEntry)}
+        return HistoryEntry(**{k: v for k, v in d.items() if k in known})
+
+
+def new_entry(
+    preset_name: str,
+    deck_name: str,
+    card_count: int,
+    outcome: str,
+    triggered_by: str = TRIGGER_MANUAL,
+    detail: str = "",
+    now: datetime = None,
+) -> HistoryEntry:
+    return HistoryEntry(
+        timestamp=(now or datetime.now()).isoformat(timespec="seconds"),
+        preset_name=preset_name,
+        deck_name=deck_name,
+        card_count=card_count,
+        outcome=outcome,
+        triggered_by=triggered_by,
+        detail=detail,
+    )
+
+
+def load_history(config: dict) -> list:
+    return [HistoryEntry.from_dict(e) for e in config.get("history", [])]
+
+
+def append_entry(config: dict, entry: HistoryEntry) -> dict:
+    entries = load_history(config)
+    entries.append(entry)
+    entries = entries[-MAX_ENTRIES:]
+    config["history"] = [e.to_dict() for e in entries]
+    return config
+
+
+def clear_history(config: dict) -> dict:
+    config["history"] = []
+    return config
