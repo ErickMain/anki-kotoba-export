@@ -47,6 +47,11 @@ class KotobaCard:
     comment: str = ""
     instructions: str = ""
     render_as: str = RENDER_AS_TEXT
+    # Anki note id(s) this card came from - not sent to Kotoba (build_csv and
+    # api.py's payload builder both list their fields explicitly), just kept
+    # for "open in Browser" from the export preview. A merged card (see
+    # merge_duplicate_questions) can trace back to more than one note.
+    source_note_ids: list = field(default_factory=list)
 
     def answers_joined(self) -> str:
         return ",".join(a for a in self.answers if a)
@@ -87,6 +92,7 @@ def merge_duplicate_questions(cards: list) -> list:
                 comment=card.comment,
                 instructions=card.instructions,
                 render_as=card.render_as,
+                source_note_ids=list(card.source_note_ids),
             )
             order.append(key)
         else:
@@ -95,6 +101,9 @@ def merge_duplicate_questions(cards: list) -> list:
                     existing.answers.append(answer)
             if card.comment and card.comment not in existing.comment:
                 existing.comment = f"{existing.comment} / {card.comment}" if existing.comment else card.comment
+            for nid in card.source_note_ids:
+                if nid not in existing.source_note_ids:
+                    existing.source_note_ids.append(nid)
 
     return [merged_by_key[key] for key in order]
 

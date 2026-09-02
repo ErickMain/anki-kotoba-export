@@ -35,6 +35,7 @@ def test_build_cards_maps_fields_and_defaults_to_type_the_reading():
     assert card.comment == "cat"
     assert card.instructions == "Type the reading!"
     assert card.render_as == "IMAGE"  # default: hide the answer from copy/paste
+    assert card.source_note_ids == [1]  # so the preview can open this note in the Browser
 
 
 def test_build_cards_skips_notes_of_a_different_note_type():
@@ -103,6 +104,7 @@ def test_build_cards_merges_notes_that_share_a_question():
     assert len(result.cards) == 1
     assert result.merged_duplicate_count == 1
     assert result.cards[0].answers == ["ひょう", "おもて"]
+    assert result.cards[0].source_note_ids == [1, 2]
 
 
 def test_build_cards_caps_huge_mined_comment():

@@ -96,6 +96,7 @@ def build_cards_for_preset(col, preset) -> ExportResult:
                 comment=comment,
                 instructions=preset.instructions,
                 render_as=preset.render_as,
+                source_note_ids=[nid],
             )
         )
 

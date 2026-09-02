@@ -2,6 +2,7 @@
 paths: clipboard+browser (always available) or direct API upload (only when
 advanced mode is configured with a session cookie).
 """
+from aqt import dialogs, mw
 from aqt.qt import (
     QAbstractItemView,
     QApplication,
@@ -14,6 +15,7 @@ from aqt.qt import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMenu,
     QPushButton,
     Qt,
     QTableWidget,
@@ -65,15 +67,18 @@ class PreviewDialog(QDialog):
             layout.addWidget(QLabel("Warnings:"))
             layout.addWidget(warn_list)
 
-        table = QTableWidget(len(self.result.cards), 3)
-        table.setHorizontalHeaderLabels(["Question", "Answer(s)", "Comment"])
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table = QTableWidget(len(self.result.cards), 3)
+        self.table.setHorizontalHeaderLabels(["Question", "Answer(s)", "Comment"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_row_context_menu)
+        self.table.setToolTip("Right-click a row to open its note(s) in the Anki Browser.")
         for row, card in enumerate(self.result.cards):
-            table.setItem(row, 0, QTableWidgetItem(card.question))
-            table.setItem(row, 1, QTableWidgetItem(card.answers_joined()))
-            table.setItem(row, 2, QTableWidgetItem(card.comment))
-        layout.addWidget(table)
+            self.table.setItem(row, 0, QTableWidgetItem(card.question))
+            self.table.setItem(row, 1, QTableWidgetItem(card.answers_joined()))
+            self.table.setItem(row, 2, QTableWidgetItem(card.comment))
+        layout.addWidget(self.table)
 
         btn_row = QHBoxLayout()
         copy_btn = QPushButton("Copy CSV + Open Kotoba")
@@ -98,6 +103,24 @@ class PreviewDialog(QDialog):
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def _show_row_context_menu(self, pos):
+        row = self.table.rowAt(pos.y())
+        if row < 0 or row >= len(self.result.cards):
+            return
+        note_ids = self.result.cards[row].source_note_ids
+        if not note_ids:
+            return
+
+        menu = QMenu(self)
+        label = "Open in Browser" if len(note_ids) == 1 else f"Open {len(note_ids)} notes in Browser"
+        action = menu.addAction(label)
+        action.triggered.connect(lambda: self._open_notes_in_browser(note_ids))
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _open_notes_in_browser(self, note_ids):
+        browser = dialogs.open("Browser", mw)
+        browser.search_for("nid:" + ",".join(str(nid) for nid in note_ids))
 
     def _advanced_ready(self) -> bool:
         adv = self.config.get("advanced", {})

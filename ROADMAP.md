@@ -4,10 +4,6 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
 
 ## Strong candidates
 
-- **"Open in Browser" from a preview row.** Right-click a row in the export
-  preview -> jump straight to that note in Anki's Browser. Would have turned
-  diagnosing the 反撃 citation bug into one click instead of a manual
-  Browse search.
 - **Duplicate/clone a preset.** Spin up a variant (e.g. "leeches - tag A"
   from "leeches - tag B") without rebuilding the field mapping from scratch.
 - **Smarter comment formatting.** Instead of just truncating, insert a
@@ -46,8 +42,10 @@ capping, citation-pattern sanity warning, ruby-tag (`<ruby><rt>`) furigana
 resolution, name-keyed deck overwrite linking, deck manager (list/delete),
 export/import presets (JSON, upserts by id), multiple note types per preset
 (each with its own field mapping, with automatic migration of pre-0.3.0
-single-note-type presets), `.ankiaddon` packaging, GitHub repo with tagged
-releases carrying the packaged addon
+single-note-type presets), "open in Browser" from a right-clicked preview
+row (tracks source note id(s) through duplicate-question merging),
+`.ankiaddon` packaging, GitHub repo with tagged releases carrying the
+packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 

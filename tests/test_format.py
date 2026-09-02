@@ -74,6 +74,21 @@ def test_merge_duplicate_questions_does_not_merge_blank_questions_together():
     assert len(merged) == 2
 
 
+def test_merge_duplicate_questions_unions_source_note_ids():
+    cards = [
+        kf.KotobaCard(question="表", answers=["ひょう"], source_note_ids=[1]),
+        kf.KotobaCard(question="表", answers=["おもて"], source_note_ids=[2]),
+    ]
+    merged = kf.merge_duplicate_questions(cards)
+    assert merged[0].source_note_ids == [1, 2]
+
+
+def test_merge_duplicate_questions_keeps_source_note_ids_for_unique_questions():
+    cards = [kf.KotobaCard(question="猫", answers=["ねこ"], source_note_ids=[1])]
+    merged = kf.merge_duplicate_questions(cards)
+    assert merged[0].source_note_ids == [1]
+
+
 def test_validate_cards_flags_duplicate_questions():
     a = kf.KotobaCard(question="猫", answers=["ねこ"])
     b = kf.KotobaCard(question="猫", answers=["みょう"])
