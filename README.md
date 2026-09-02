@@ -2,6 +2,8 @@
 
 Fast export of Anki cards to [kotobaweb.com](https://kotobaweb.com) "Type the reading!" custom decks, with saved presets for recurring study sessions (forgotten today, leeches, suspended, by tag...).
 
+Repo: [github.com/ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export) · [Releases](https://github.com/ErickMain/anki-kotoba-export/releases) (grab the `.ankiaddon` from the latest one to install)
+
 ## Why there's no "just click connect"
 
 Kotoba's backend only supports login via Discord OAuth2 + a browser session cookie - there's no API key. So this add-on has two delivery modes:
@@ -9,7 +11,11 @@ Kotoba's backend only supports login via Discord OAuth2 + a browser session cook
 - **Clipboard export (default, no setup):** builds the exact CSV Kotoba's own custom-deck importer expects, copies it to your clipboard, and opens kotobaweb.com. You paste it into "New Custom Deck -> Import". Nothing here can be broken by a Kotoba login change.
 - **Advanced / direct API (opt-in):** paste your kotobaweb.com session cookie into *Kotoba Export -> Advanced settings* and the add-on will upload decks for you with one click, including overwriting the same deck on repeat runs. This uses an internal, undocumented API and your session cookie is a bearer secret - treat it like a password. See the warning text in that dialog for how to grab the cookie from DevTools.
 
-## Install (development / manual)
+## Install
+
+**From a release (recommended for a second machine):** download the `.ankiaddon` from the [latest release](https://github.com/ErickMain/anki-kotoba-export/releases/latest), then in Anki: Tools -> Add-ons -> Install from file.
+
+**From source (development):**
 
 1. Close Anki if it's running.
 2. Copy the `kotoba_export` folder into your Anki add-ons folder:

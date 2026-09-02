@@ -2,15 +2,6 @@
 
 Ideas for kotoba_export, not yet built. Pick from here next session.
 
-## Project infra (requested 2026-09-01, night before)
-
-- **Create a GitHub repo and start tagging releases**, attaching the
-  packaged `.ankiaddon` (like `kotoba_export-0.1.0.ankiaddon`) to each
-  GitHub release. Not a git repo yet - needs `git init`, a remote, and
-  probably a `.gitignore` (exclude `__pycache__`, the venv, built
-  `.ankiaddon` files themselves if releases are the intended distribution
-  point rather than committing binaries).
-
 ## Committed (requested 2026-09-01)
 
 - **Export/import presets.** Right now presets live only in Anki's profile
@@ -68,4 +59,15 @@ query builder (state chips + tags + deck + raw search), field mapping with
 Image/Text render choice, duplicate-question auto-merge, comment length
 capping, citation-pattern sanity warning, ruby-tag (`<ruby><rt>`) furigana
 resolution, name-keyed deck overwrite linking, deck manager (list/delete),
-`.ankiaddon` packaging.
+`.ankiaddon` packaging, GitHub repo with tagged releases carrying the
+packaged addon
+([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
+first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
+
+### Release process (for next time)
+
+1. Bump `human_version` in `kotoba_export/manifest.json`.
+2. Rebuild the zip: from `anki-kotoba-export/`, clear `__pycache__` under
+   `kotoba_export/`, then `Compress-Archive -Path .\kotoba_export\* -DestinationPath .\kotoba_export-<version>.ankiaddon`.
+3. Commit, `git tag -a v<version> -m "v<version>"`, `git push origin main --tags`.
+4. `gh release create v<version> .\kotoba_export-<version>.ankiaddon --title "..." --notes "..."`.
