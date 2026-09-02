@@ -8,10 +8,7 @@ from kotoba.presets import Preset
 
 def _make_preset(**overrides):
     p = Preset.new("Test preset")
-    p.note_type = "Japanese"
-    p.expression_field = "Expression"
-    p.reading_field = "Reading"
-    p.meaning_field = "Meaning"
+    p.set_field_mapping("Japanese", "Expression", "Reading", "Meaning")
     for key, value in overrides.items():
         setattr(p, key, value)
     return p
@@ -52,6 +49,25 @@ def test_build_cards_skips_notes_of_a_different_note_type():
 
     assert len(result.cards) == 1
     assert result.skipped_wrong_note_type == 1
+
+
+def test_build_cards_pulls_from_multiple_note_types_with_their_own_field_names():
+    notes = {
+        1: FakeNote("Japanese", {"Expression": "猫", "Reading": "ねこ", "Meaning": "cat"}, nid=1),
+        2: FakeNote("Mining", {"Word": "犬", "WordReading": "いぬ", "Glossary": "dog"}, nid=2),
+        3: FakeNote("Basic", {"Front": "hello", "Back": "world"}, nid=3),
+    }
+    col = FakeCollection(notes)
+    preset = _make_preset()  # already maps "Japanese"
+    preset.set_field_mapping("Mining", "Word", "WordReading", "Glossary")
+
+    result = export.build_cards_for_preset(col, preset)
+
+    assert result.skipped_wrong_note_type == 1  # only the "Basic" note
+    questions = {c.question: c for c in result.cards}
+    assert questions["猫"].answers == ["ねこ"]
+    assert questions["犬"].answers == ["いぬ"]
+    assert questions["犬"].comment == "dog"
 
 
 def test_build_cards_splits_multiple_answers():

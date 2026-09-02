@@ -60,23 +60,22 @@ def build_cards_for_preset(col, preset) -> ExportResult:
     query = build_query_for_preset(preset)
     note_ids = search.find_matching_note_ids(col, query)
 
-    field_sources = {
-        "expression": preset.expression_field,
-        "reading": preset.reading_field,
-        "meaning": preset.meaning_field,
-    }
-
     cards = []
     skipped = 0
     for nid in note_ids:
         note = col.get_note(nid)
-        if preset.note_type and _note_type_name(note) != preset.note_type:
+        mapping = preset.field_mapping_for(_note_type_name(note))
+        if mapping is None:
             skipped += 1
             continue
 
         values = {}
-        for key, field_name in field_sources.items():
-            raw = _field_value(note, field_name)
+        for key, mapping_key in (
+            ("expression", "expression_field"),
+            ("reading", "reading_field"),
+            ("meaning", "meaning_field"),
+        ):
+            raw = _field_value(note, mapping.get(mapping_key, ""))
             furigana_keep = "reading" if key == "reading" else "base"
             values[key] = clean.clean_field(
                 raw,

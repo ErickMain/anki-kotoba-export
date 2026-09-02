@@ -44,6 +44,59 @@ def test_from_dict_ignores_unknown_legacy_fields_and_fills_defaults():
     assert p.get_deck_link("anything") is None
 
 
+def test_field_mapping_roundtrip():
+    p = Preset.new("Vocab")
+    assert p.field_mapping_for("Japanese") is None
+
+    p.set_field_mapping("Japanese", "Expression", "Reading", "Meaning")
+    mapping = p.field_mapping_for("Japanese")
+    assert mapping == {"expression_field": "Expression", "reading_field": "Reading", "meaning_field": "Meaning"}
+
+
+def test_field_mapping_supports_multiple_note_types():
+    p = Preset.new("Vocab")
+    p.set_field_mapping("Japanese", "Expression", "Reading", "Meaning")
+    p.set_field_mapping("Mining", "Word", "WordReading", "Glossary")
+
+    assert p.field_mapping_for("Japanese")["expression_field"] == "Expression"
+    assert p.field_mapping_for("Mining")["expression_field"] == "Word"
+    assert p.field_mapping_for("Basic") is None
+
+
+def test_from_dict_migrates_legacy_single_note_type_preset():
+    # Simulates a preset saved before multi-note-type support (0.2.0 and
+    # earlier): a single note_type + 3 top-level field names.
+    legacy = {
+        "id": "abc",
+        "name": "Forgotten Today",
+        "note_type": "Japanese",
+        "expression_field": "Expression",
+        "reading_field": "Reading",
+        "meaning_field": "Meaning",
+    }
+    p = Preset.from_dict(legacy)
+    assert p.field_mapping_for("Japanese") == {
+        "expression_field": "Expression",
+        "reading_field": "Reading",
+        "meaning_field": "Meaning",
+    }
+
+
+def test_from_dict_prefers_note_type_mappings_over_legacy_fields_if_both_present():
+    # Shouldn't happen in practice, but a dict with both should not let the
+    # legacy migration clobber an already-migrated/newer note_type_mappings.
+    d = {
+        "id": "abc",
+        "name": "X",
+        "note_type": "Old",
+        "expression_field": "OldField",
+        "note_type_mappings": {"New": {"expression_field": "NewField", "reading_field": "", "meaning_field": ""}},
+    }
+    p = Preset.from_dict(d)
+    assert p.field_mapping_for("Old") is None
+    assert p.field_mapping_for("New")["expression_field"] == "NewField"
+
+
 def test_upsert_preset_updates_existing_by_id():
     p = Preset.new("A")
     config = save_presets({}, [p])

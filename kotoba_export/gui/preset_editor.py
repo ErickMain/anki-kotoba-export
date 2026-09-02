@@ -1,4 +1,4 @@
-"""Create/edit a preset: what to search for, which note type and fields it
+"""Create/edit a preset: what to search for, which note types and fields it
 comes from, how those map onto Kotoba's Question/Answers/Comment, and how
 the resulting deck should be named and reused.
 """
@@ -9,11 +9,13 @@ from aqt.qt import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     Qt,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
 )
@@ -21,6 +23,7 @@ from aqt.utils import showWarning
 
 from ..kotoba import format as kotoba_format
 from ..kotoba.presets import REUSE_NEW_EACH_TIME, REUSE_OVERWRITE, Preset
+from .note_type_mapping_dialog import NoteTypeMappingDialog
 
 _SOURCE_OPTIONS = [
     ("Expression / word", "expression"),
@@ -38,37 +41,53 @@ def _fill_combo(combo: QComboBox, options, current_value: str):
     combo.setCurrentIndex(idx if idx >= 0 else 0)
 
 
+def _mapping_label(note_type: str, mapping: dict) -> str:
+    parts = [mapping.get("expression_field", ""), mapping.get("reading_field", ""), mapping.get("meaning_field", "")]
+    return f"{note_type}  ->  " + " / ".join(p or "(none)" for p in parts)
+
+
 class PresetEditorDialog(QDialog):
     def __init__(self, parent, preset: Preset, advanced_enabled: bool):
         super().__init__(parent)
         self.preset = preset
         self.advanced_enabled = advanced_enabled
+        self._note_type_mappings = {}  # working copy, written back to the preset on Save
         self.setWindowTitle("Kotoba Export Preset")
-        self.resize(480, 640)
+        self.resize(480, 680)
         self._build_ui()
         self._load_preset()
 
     # -- UI construction -----------------------------------------------
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        form = QFormLayout()
-        layout.addLayout(form)
 
+        name_form = QFormLayout()
+        layout.addLayout(name_form)
         self.name_edit = QLineEdit()
-        form.addRow("Preset name:", self.name_edit)
+        name_form.addRow("Preset name:", self.name_edit)
 
-        self.note_type_combo = QComboBox()
-        for nt in mw.col.models.all_names_and_ids():
-            self.note_type_combo.addItem(nt.name, nt.id)
-        self.note_type_combo.currentIndexChanged.connect(self._refresh_field_combos)
-        form.addRow("Note type:", self.note_type_combo)
+        layout.addWidget(
+            QLabel(
+                "Note types this preset pulls from - each needs its own Expression/Reading/"
+                "Meaning field mapping, since field names rarely match across note types:"
+            )
+        )
+        self.note_type_list = QListWidget()
+        self.note_type_list.setMaximumHeight(90)
+        self.note_type_list.itemDoubleClicked.connect(self._edit_note_type_mapping)
+        layout.addWidget(self.note_type_list)
 
-        self.expression_field_combo = QComboBox()
-        form.addRow("Expression / word field:", self.expression_field_combo)
-        self.reading_field_combo = QComboBox()
-        form.addRow("Reading (kana) field:", self.reading_field_combo)
-        self.meaning_field_combo = QComboBox()
-        form.addRow("Meaning field:", self.meaning_field_combo)
+        nt_btn_row = QHBoxLayout()
+        add_nt_btn = QPushButton("Add note type...")
+        add_nt_btn.clicked.connect(self._add_note_type_mapping)
+        nt_btn_row.addWidget(add_nt_btn)
+        edit_nt_btn = QPushButton("Edit...")
+        edit_nt_btn.clicked.connect(self._edit_note_type_mapping)
+        nt_btn_row.addWidget(edit_nt_btn)
+        remove_nt_btn = QPushButton("Remove")
+        remove_nt_btn.clicked.connect(self._remove_note_type_mapping)
+        nt_btn_row.addWidget(remove_nt_btn)
+        layout.addLayout(nt_btn_row)
 
         layout.addWidget(QLabel("Which cards to include (all checked filters apply together):"))
         self.forgotten_today_check = QCheckBox("Forgotten today (pressed Again today)")
@@ -88,24 +107,30 @@ class PresetEditorDialog(QDialog):
             self.tags_list.addItem(item)
         layout.addWidget(self.tags_list)
 
+        query_form = QFormLayout()
+        layout.addLayout(query_form)
+
         self.deck_combo = QComboBox()
         self.deck_combo.addItem("(any deck)", "")
         for deck in sorted(mw.col.decks.all_names_and_ids(), key=lambda d: d.name.lower()):
             self.deck_combo.addItem(deck.name, deck.name)
-        form.addRow("Deck (optional, includes subdecks):", self.deck_combo)
+        query_form.addRow("Deck (optional, includes subdecks):", self.deck_combo)
 
         self.raw_query_edit = QLineEdit()
         self.raw_query_edit.setPlaceholderText("e.g. deck:Japanese::Vocab -is:new")
-        form.addRow("Advanced Anki search (optional):", self.raw_query_edit)
+        query_form.addRow("Advanced Anki search (optional):", self.raw_query_edit)
 
-        form.addRow(QLabel("<b>Kotoba deck ('Type the reading!' style)</b>"))
+        kotoba_form = QFormLayout()
+        layout.addLayout(kotoba_form)
+
+        kotoba_form.addRow(QLabel("<b>Kotoba deck ('Type the reading!' style)</b>"))
 
         self.question_source_combo = QComboBox()
-        form.addRow("Question column shows:", self.question_source_combo)
+        kotoba_form.addRow("Question column shows:", self.question_source_combo)
         self.answer_source_combo = QComboBox()
-        form.addRow("Answer column shows:", self.answer_source_combo)
+        kotoba_form.addRow("Answer column shows:", self.answer_source_combo)
         self.comment_source_combo = QComboBox()
-        form.addRow("Comment column shows:", self.comment_source_combo)
+        kotoba_form.addRow("Comment column shows:", self.comment_source_combo)
 
         self.comment_max_length_spin = QSpinBox()
         self.comment_max_length_spin.setRange(50, kotoba_format.COMMENT_MAX_LENGTH)
@@ -115,19 +140,19 @@ class PresetEditorDialog(QDialog):
             f"field - this trims it, since Kotoba rejects comments over "
             f"{kotoba_format.COMMENT_MAX_LENGTH} chars anyway."
         )
-        form.addRow("Comment max length:", self.comment_max_length_spin)
+        kotoba_form.addRow("Comment max length:", self.comment_max_length_spin)
 
         self.strip_furigana_check = QCheckBox("Strip Anki furigana brackets, e.g. 漢字[かんじ]")
         self.strip_furigana_check.setChecked(True)
-        layout.addWidget(self.strip_furigana_check)
+        kotoba_form.addRow(self.strip_furigana_check)
 
         self.render_as_combo = QComboBox()
         self.render_as_combo.addItem("Image (hides the text from copy/paste - recommended)", "IMAGE")
         self.render_as_combo.addItem("Plain text", "TEXT")
-        form.addRow("Question shown as:", self.render_as_combo)
+        kotoba_form.addRow("Question shown as:", self.render_as_combo)
 
         self.instructions_edit = QLineEdit()
-        form.addRow("Instructions shown in Kotoba:", self.instructions_edit)
+        kotoba_form.addRow("Instructions shown in Kotoba:", self.instructions_edit)
 
         self.deck_name_template_edit = QLineEdit()
         self.deck_name_template_edit.setToolTip(
@@ -137,10 +162,10 @@ class PresetEditorDialog(QDialog):
             "that keeps getting replaced. You can always type a one-off name in the export "
             "preview to save a snapshot without touching the usual deck."
         )
-        form.addRow("Deck name template:", self.deck_name_template_edit)
+        kotoba_form.addRow("Deck name template:", self.deck_name_template_edit)
 
         self.deck_description_edit = QLineEdit()
-        form.addRow("Deck description (optional):", self.deck_description_edit)
+        kotoba_form.addRow("Deck description (optional):", self.deck_description_edit)
 
         self.reuse_mode_combo = QComboBox()
         self.reuse_mode_combo.addItem("New deck every run", REUSE_NEW_EACH_TIME)
@@ -154,7 +179,7 @@ class PresetEditorDialog(QDialog):
         )
         if not self.advanced_enabled:
             self.reuse_mode_combo.model().item(1).setEnabled(False)
-        form.addRow("Repeated runs:", self.reuse_mode_combo)
+        kotoba_form.addRow("Repeated runs:", self.reuse_mode_combo)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -163,40 +188,68 @@ class PresetEditorDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def _refresh_field_combos(self):
-        model_id = self.note_type_combo.currentData()
-        field_names = []
-        if model_id is not None:
-            model = mw.col.models.get(model_id)
-            if model:
-                field_names = mw.col.models.field_names(model)
-        for combo in (self.expression_field_combo, self.reading_field_combo, self.meaning_field_combo):
-            current = combo.currentText()
-            combo.clear()
-            combo.addItems(field_names)
-            idx = combo.findText(current)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
+    # -- note type mapping list ------------------------------------------
+    def _refresh_note_type_list(self):
+        self.note_type_list.clear()
+        for note_type, mapping in self._note_type_mappings.items():
+            self.note_type_list.addItem(_mapping_label(note_type, mapping))
+
+    def _selected_note_type(self):
+        row = self.note_type_list.currentRow()
+        keys = list(self._note_type_mappings.keys())
+        if row < 0 or row >= len(keys):
+            return None
+        return keys[row]
+
+    def _add_note_type_mapping(self):
+        dlg = NoteTypeMappingDialog(self, exclude_note_types=set(self._note_type_mappings.keys()))
+        if dlg.exec():
+            self._note_type_mappings[dlg.result_note_type] = {
+                "expression_field": dlg.result_expression_field,
+                "reading_field": dlg.result_reading_field,
+                "meaning_field": dlg.result_meaning_field,
+            }
+            self._refresh_note_type_list()
+
+    def _edit_note_type_mapping(self):
+        note_type = self._selected_note_type()
+        if not note_type:
+            showWarning("Select a note type mapping first.", parent=self)
+            return
+        mapping = self._note_type_mappings[note_type]
+        dlg = NoteTypeMappingDialog(
+            self,
+            note_type=note_type,
+            expression_field=mapping.get("expression_field", ""),
+            reading_field=mapping.get("reading_field", ""),
+            meaning_field=mapping.get("meaning_field", ""),
+            exclude_note_types=set(self._note_type_mappings.keys()) - {note_type},
+        )
+        if dlg.exec():
+            if dlg.result_note_type != note_type:
+                del self._note_type_mappings[note_type]
+            self._note_type_mappings[dlg.result_note_type] = {
+                "expression_field": dlg.result_expression_field,
+                "reading_field": dlg.result_reading_field,
+                "meaning_field": dlg.result_meaning_field,
+            }
+            self._refresh_note_type_list()
+
+    def _remove_note_type_mapping(self):
+        note_type = self._selected_note_type()
+        if not note_type:
+            showWarning("Select a note type mapping first.", parent=self)
+            return
+        del self._note_type_mappings[note_type]
+        self._refresh_note_type_list()
 
     # -- load / save -----------------------------------------------------
     def _load_preset(self):
         p = self.preset
         self.name_edit.setText(p.name)
 
-        if p.note_type:
-            idx = self.note_type_combo.findText(p.note_type)
-            if idx >= 0:
-                self.note_type_combo.setCurrentIndex(idx)
-        self._refresh_field_combos()
-
-        for combo, value in (
-            (self.expression_field_combo, p.expression_field),
-            (self.reading_field_combo, p.reading_field),
-            (self.meaning_field_combo, p.meaning_field),
-        ):
-            idx = combo.findText(value)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
+        self._note_type_mappings = {k: dict(v) for k, v in p.note_type_mappings.items()}
+        self._refresh_note_type_list()
 
         self.forgotten_today_check.setChecked(p.forgotten_today)
         self.leech_check.setChecked(p.leech)
@@ -236,16 +289,13 @@ class PresetEditorDialog(QDialog):
         if not name:
             showWarning("Give this preset a name.", parent=self)
             return
-        if not self.expression_field_combo.currentText() and not self.reading_field_combo.currentText():
-            showWarning("Pick at least an expression or reading field.", parent=self)
+        if not self._note_type_mappings:
+            showWarning("Add at least one note type mapping.", parent=self)
             return
 
         p = self.preset
         p.name = name
-        p.note_type = self.note_type_combo.currentText()
-        p.expression_field = self.expression_field_combo.currentText()
-        p.reading_field = self.reading_field_combo.currentText()
-        p.meaning_field = self.meaning_field_combo.currentText()
+        p.note_type_mappings = {k: dict(v) for k, v in self._note_type_mappings.items()}
 
         p.forgotten_today = self.forgotten_today_check.isChecked()
         p.leech = self.leech_check.isChecked()

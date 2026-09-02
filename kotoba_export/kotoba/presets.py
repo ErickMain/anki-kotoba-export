@@ -17,13 +17,32 @@ REUSE_NEW_EACH_TIME = "new_each_time"
 REUSE_OVERWRITE = "overwrite"
 
 
+def _migrate_legacy_note_type_fields(d: dict) -> dict:
+    """Presets saved before multi-note-type support stored a single
+    note_type plus expression_field/reading_field/meaning_field. Fold those
+    into a one-entry note_type_mappings dict so existing presets keep
+    working unchanged. No-op if note_type_mappings is already present, or
+    there's no legacy note_type to migrate.
+    """
+    if "note_type_mappings" in d or not d.get("note_type"):
+        return d
+    d = dict(d)
+    d["note_type_mappings"] = {
+        d["note_type"]: {
+            "expression_field": d.get("expression_field", ""),
+            "reading_field": d.get("reading_field", ""),
+            "meaning_field": d.get("meaning_field", ""),
+        }
+    }
+    return d
+
+
 @dataclass
 class Preset:
     id: str
     name: str
-    note_type: str = ""
 
-    # Quick-filter chips, AND-ed together with tags and raw_query.
+    # Quick-filter chips, AND-ed together with tags/deck/raw_query.
     forgotten_today: bool = False
     leech: bool = False
     suspended: bool = False
@@ -32,10 +51,13 @@ class Preset:
     deck: str = ""  # "" = any deck; otherwise also matches its subdecks
     raw_query: str = ""
 
-    # Which note field (by name) supplies each of the three concepts.
-    expression_field: str = ""
-    reading_field: str = ""
-    meaning_field: str = ""
+    # {note_type_name: {"expression_field": ..., "reading_field": ...,
+    # "meaning_field": ...}}. A matched note whose type isn't a key here is
+    # skipped (counted in ExportResult.skipped_wrong_note_type) - lets one
+    # preset pull from several note types (e.g. different mining setups),
+    # each with its own field names, instead of needing a separate preset
+    # per note type.
+    note_type_mappings: dict = field(default_factory=dict)
 
     # Which concept feeds which Kotoba CSV column. "none" for comment_source
     # means the Comment column is left blank.
@@ -84,11 +106,27 @@ class Preset:
     def set_deck_link(self, deck_name: str, deck_id: str, readwrite_secret: str) -> None:
         self.deck_links[deck_name] = {"id": deck_id, "secret": readwrite_secret}
 
+    def field_mapping_for(self, note_type_name: str):
+        """Returns {"expression_field": ..., "reading_field": ..., "meaning_field": ...}
+        for this note type, or None if the preset doesn't map it (such a
+        note gets skipped during export)."""
+        return self.note_type_mappings.get(note_type_name)
+
+    def set_field_mapping(
+        self, note_type_name: str, expression_field: str, reading_field: str, meaning_field: str
+    ) -> None:
+        self.note_type_mappings[note_type_name] = {
+            "expression_field": expression_field,
+            "reading_field": reading_field,
+            "meaning_field": meaning_field,
+        }
+
     def to_dict(self) -> dict:
         return asdict(self)
 
     @staticmethod
     def from_dict(d: dict) -> "Preset":
+        d = _migrate_legacy_note_type_fields(d)
         known = {f.name for f in dataclasses.fields(Preset)}
         return Preset(**{k: v for k, v in d.items() if k in known})
 

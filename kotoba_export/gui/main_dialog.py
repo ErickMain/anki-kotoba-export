@@ -234,7 +234,8 @@ class MainDialog(QDialog):
         note_type_name = note.note_type()["name"] if note.note_type() else ""
 
         preset = Preset.new(f"Selected notes ({len(self.ad_hoc_note_ids)})")
-        preset.note_type = note_type_name
+        if note_type_name:
+            preset.set_field_mapping(note_type_name, "", "", "")
         preset.raw_query = "nid:" + ",".join(str(nid) for nid in self.ad_hoc_note_ids)
 
         dlg = PresetEditorDialog(self, preset, self._advanced_enabled())
