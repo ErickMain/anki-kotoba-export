@@ -98,6 +98,20 @@ class Preset:
     def new(name: str) -> "Preset":
         return Preset(id=str(uuid.uuid4()), name=name)
 
+    def duplicate(self, new_name: str = None) -> "Preset":
+        """A copy of this preset with a fresh id and no deck_links - those
+        are tied to the original's identity via its rendered deck name, so a
+        clone should not silently start overwriting the original's Kotoba
+        deck the first time it's run in overwrite mode. Everything else
+        (search filters, field mappings, Kotoba column mapping, deck naming)
+        is copied as-is.
+        """
+        data = self.to_dict()
+        data["id"] = str(uuid.uuid4())
+        data["name"] = new_name if new_name is not None else f"{self.name} (copy)"
+        data["deck_links"] = {}
+        return Preset.from_dict(data)
+
     def get_deck_link(self, deck_name: str):
         """Returns {"id": ..., "secret": ...} for a previously-uploaded deck
         with this exact rendered name, or None if none exists yet."""

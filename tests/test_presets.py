@@ -20,6 +20,43 @@ def test_deck_link_is_keyed_by_exact_name_not_preset():
     assert p.get_deck_link("Forgotten Today - keep this one") is None
 
 
+def test_duplicate_gets_a_fresh_id_and_default_copy_name():
+    p = Preset.new("Leeches")
+    p.tags = ["N3"]
+    clone = p.duplicate()
+
+    assert clone.id != p.id
+    assert clone.name == "Leeches (copy)"
+    assert clone.tags == ["N3"]
+
+
+def test_duplicate_accepts_a_custom_name():
+    p = Preset.new("Leeches")
+    clone = p.duplicate(new_name="Leeches - N4")
+    assert clone.name == "Leeches - N4"
+
+
+def test_duplicate_does_not_carry_over_deck_links():
+    p = Preset.new("Forgotten Today")
+    p.set_deck_link("Forgotten Today", "deck123", "secret456")
+    clone = p.duplicate()
+
+    assert clone.deck_links == {}
+    # The original is untouched.
+    assert p.get_deck_link("Forgotten Today") == {"id": "deck123", "secret": "secret456"}
+
+
+def test_duplicate_copies_note_type_mappings_independently():
+    p = Preset.new("Vocab")
+    p.set_field_mapping("Japanese", "Expression", "Reading", "Meaning")
+    clone = p.duplicate()
+
+    clone.set_field_mapping("Mining", "Word", "WordReading", "Glossary")
+
+    assert p.field_mapping_for("Mining") is None  # editing the clone didn't touch the original
+    assert clone.field_mapping_for("Japanese")["expression_field"] == "Expression"
+
+
 def test_preset_survives_config_roundtrip_with_deck_links():
     p = Preset.new("Forgotten Today")
     p.set_deck_link("Forgotten Today", "deck123", "secret456")

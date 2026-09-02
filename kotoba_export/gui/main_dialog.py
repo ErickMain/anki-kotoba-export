@@ -64,6 +64,11 @@ class MainDialog(QDialog):
         edit_btn.clicked.connect(self._edit_selected)
         btn_row.addWidget(edit_btn)
 
+        duplicate_btn = QPushButton("Duplicate...")
+        duplicate_btn.setToolTip("Clone this preset - same filters and field mappings, no shared Kotoba deck link.")
+        duplicate_btn.clicked.connect(self._duplicate_selected)
+        btn_row.addWidget(duplicate_btn)
+
         delete_btn = QPushButton("Delete")
         delete_btn.clicked.connect(self._delete_selected)
         btn_row.addWidget(delete_btn)
@@ -125,6 +130,18 @@ class MainDialog(QDialog):
         dlg = PresetEditorDialog(self, preset, self._advanced_enabled())
         if dlg.exec():
             self.config = upsert_preset(self.config, preset)
+            config_store.save_config(self.config)
+            self._reload_list()
+
+    def _duplicate_selected(self):
+        preset = self._selected_preset()
+        if not preset:
+            showWarning("Select a preset first.", parent=self)
+            return
+        clone = preset.duplicate()
+        dlg = PresetEditorDialog(self, clone, self._advanced_enabled())
+        if dlg.exec():
+            self.config = upsert_preset(self.config, clone)
             config_store.save_config(self.config)
             self._reload_list()
 

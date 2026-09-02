@@ -4,8 +4,6 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
 
 ## Strong candidates
 
-- **Duplicate/clone a preset.** Spin up a variant (e.g. "leeches - tag A"
-  from "leeches - tag B") without rebuilding the field mapping from scratch.
 - **Smarter comment formatting.** Instead of just truncating, insert a
   separator before recognized "(DictionaryName)" citation patterns so a long
   mined comment reads as distinct dictionary entries rather than one
@@ -44,8 +42,9 @@ export/import presets (JSON, upserts by id), multiple note types per preset
 (each with its own field mapping, with automatic migration of pre-0.3.0
 single-note-type presets), "open in Browser" from a right-clicked preview
 row (tracks source note id(s) through duplicate-question merging),
-`.ankiaddon` packaging, GitHub repo with tagged releases carrying the
-packaged addon
+duplicate/clone a preset (fresh id, no shared deck_links, opens the editor
+for tweaking before it's saved), `.ankiaddon` packaging, GitHub repo with
+tagged releases carrying the packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 
