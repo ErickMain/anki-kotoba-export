@@ -11,9 +11,10 @@ from aqt.utils import showInfo, tooltip
 from . import config_store
 from .gui.main_dialog import MainDialog
 from .kotoba import export as export_mod
+from .kotoba import format as kotoba_format
 from .kotoba import history
 from .kotoba import upload as upload_mod
-from .kotoba.presets import load_presets, upsert_preset
+from .kotoba.presets import load_presets_safe, upsert_preset
 
 # Tighter than api.MAX_RETRIES (the interactive default): retries add
 # bounded but real delay, and this runs during Anki's own
@@ -54,9 +55,8 @@ def _run_auto_presets(trigger: str):
     cookie = adv.get("session_cookie", "")
     ready = bool(adv.get("auto_export_enabled") and adv.get("direct_api_enabled") and cookie.strip())
 
-    try:
-        presets = [p for p in load_presets(config) if p.matches_auto_trigger(trigger)]
-    except Exception as exc:  # noqa: BLE001 - see docstring: this must never raise
+    all_presets, load_error = load_presets_safe(config)
+    if load_error:
         config = history.append_entry(
             config,
             history.new_entry(
@@ -65,11 +65,13 @@ def _run_auto_presets(trigger: str):
                 0,
                 history.OUTCOME_ERROR,
                 trigger,
-                detail=f"Could not load presets (config may be corrupted): {exc}",
+                detail=f"Could not load presets (config may be corrupted): {load_error}",
             ),
         )
         config_store.save_config(config)
         return
+
+    presets = [p for p in all_presets if p.matches_auto_trigger(trigger)]
     if not presets:
         return
 
@@ -132,12 +134,7 @@ def _run_auto_presets(trigger: str):
             # these for a manual run; there's no dialog here, so they'd
             # otherwise go unseen - fold a summary into the history detail
             # instead.
-            detail = ""
-            if result.warnings:
-                shown = result.warnings[:3]
-                detail = f"{len(result.warnings)} warning(s): " + "; ".join(shown)
-                if len(result.warnings) > len(shown):
-                    detail += f" (+{len(result.warnings) - len(shown)} more)"
+            detail = kotoba_format.summarize_warnings(result.warnings)
             config = history.append_entry(
                 config,
                 history.new_entry(

@@ -197,6 +197,36 @@ def load_presets(config: dict) -> list:
     return [Preset.from_dict(p) for p in config.get("presets", [])]
 
 
+def load_presets_safe(config: dict) -> tuple:
+    """Like load_presets, but never raises - returns ([], "") normally, or
+    ([], error_message) if a preset entry is malformed (e.g. missing id/name,
+    or not a dict at all - both raise inside Preset.from_dict). Intended for
+    callers registered as Anki gui_hooks callbacks (see __init__.py's
+    _run_auto_presets), which must never let an exception escape - a
+    corrupted config would otherwise take down Anki's own
+    startup/shutdown/sync sequence instead of just failing this feature.
+    """
+    try:
+        return load_presets(config), ""
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        return [], str(exc)
+
+
+def sanitize_imported_presets(presets: list) -> list:
+    """Resets auto_run_triggers and deck_links on each preset - the two
+    fields with real-world side effects (unattended uploads, and which live
+    Kotoba deck a name gets linked to) - since an imported file is untrusted
+    input: it may have been shared by someone else, not just a self-backup,
+    and importing shouldn't be able to silently wire up automatic uploads or
+    rebind an existing deck link. Mutates the given presets in place and
+    returns the same list, for convenience at the call site.
+    """
+    for preset in presets:
+        preset.auto_run_triggers = []
+        preset.deck_links = {}
+    return presets
+
+
 def save_presets(config: dict, presets: list) -> dict:
     config["presets"] = [p.to_dict() for p in presets]
     return config

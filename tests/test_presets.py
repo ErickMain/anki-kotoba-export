@@ -6,8 +6,10 @@ from kotoba.presets import (
     AUTO_RUN_SYNC,
     Preset,
     load_presets,
+    load_presets_safe,
     presets_from_json,
     presets_to_json,
+    sanitize_imported_presets,
     save_presets,
     upsert_preset,
 )
@@ -233,6 +235,90 @@ def test_presets_from_json_rejects_entry_missing_required_fields():
 def test_presets_from_json_rejects_malformed_json():
     with pytest.raises(ValueError):
         presets_from_json("not json at all")
+
+
+def test_sanitize_imported_presets_strips_auto_run_triggers_and_deck_links():
+    # H1: an imported preset must not carry over the two fields with
+    # real-world side effects (unattended uploads, and which live Kotoba
+    # deck a name overwrites) - an imported file is untrusted input.
+    p = Preset.new("Forgotten Today")
+    p.auto_run_triggers = [AUTO_RUN_SHUTDOWN, AUTO_RUN_SYNC]
+    p.set_deck_link("Forgotten Today", "attacker-deck-id", "attacker-secret")
+
+    sanitize_imported_presets([p])
+
+    assert p.auto_run_triggers == []
+    assert p.deck_links == {}
+
+
+def test_sanitize_imported_presets_leaves_everything_else_untouched():
+    p = Preset.new("Leeches")
+    p.tags = ["N3"]
+    p.instructions = "Custom instructions"
+    p.set_field_mapping("Japanese", "Expression", "Reading", "Meaning")
+
+    sanitize_imported_presets([p])
+
+    assert p.tags == ["N3"]
+    assert p.instructions == "Custom instructions"
+    assert p.field_mapping_for("Japanese")["expression_field"] == "Expression"
+
+
+def test_sanitize_imported_presets_applied_after_json_roundtrip():
+    # End-to-end shape of the real attack: a crafted export file with
+    # auto_run_triggers/deck_links pre-populated, as if to silently wire up
+    # an unattended upload to an attacker-controlled deck on import.
+    malicious_json = (
+        '[{"id": "evil-1", "name": "Innocent looking preset", '
+        '"auto_run_triggers": ["shutdown", "sync"], '
+        '"deck_name_template": "Innocent looking preset", '
+        '"deck_links": {"Innocent looking preset": {"id": "attacker-deck", "secret": "attacker-secret"}}}]'
+    )
+    imported = presets_from_json(malicious_json)
+    sanitize_imported_presets(imported)
+
+    assert imported[0].auto_run_triggers == []
+    assert imported[0].deck_links == {}
+    assert imported[0].name == "Innocent looking preset"  # non-dangerous fields still import
+
+
+def test_load_presets_safe_returns_presets_normally_for_valid_config():
+    p = Preset.new("A")
+    config = save_presets({}, [p])
+
+    presets, error = load_presets_safe(config)
+
+    assert error == ""
+    assert len(presets) == 1
+    assert presets[0].name == "A"
+
+
+def test_load_presets_safe_returns_error_instead_of_raising_on_missing_required_field():
+    # F1: a preset dict missing id/name raises inside Preset.from_dict -
+    # load_presets_safe must catch that rather than let it escape, since its
+    # only caller is registered as a gui_hooks callback that must never
+    # raise (profile_did_open/profile_will_close/sync_did_finish).
+    config = {"presets": [{"name": "missing id"}]}
+
+    presets, error = load_presets_safe(config)
+
+    assert presets == []
+    assert error != ""
+
+
+def test_load_presets_safe_returns_error_instead_of_raising_on_non_dict_entry():
+    config = {"presets": ["not a dict"]}
+
+    presets, error = load_presets_safe(config)
+
+    assert presets == []
+    assert error != ""
+
+
+def test_load_presets_safe_empty_config_is_not_an_error():
+    presets, error = load_presets_safe({})
+    assert presets == []
+    assert error == ""
 
 
 def test_import_upserts_by_id_into_existing_config():

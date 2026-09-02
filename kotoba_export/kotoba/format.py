@@ -201,6 +201,22 @@ def validate_cards(cards: list) -> list:
     return warnings
 
 
+def summarize_warnings(warnings: list, max_shown: int = 3) -> str:
+    """Condenses a validate_cards()-style warnings list into one line, for
+    contexts with no room to show the full list - the preview dialog shows
+    every warning for a manual run, but an automatic/unattended run has no
+    dialog, only a History entry's one-line detail field. "" for an empty
+    list.
+    """
+    if not warnings:
+        return ""
+    shown = warnings[:max_shown]
+    detail = f"{len(warnings)} warning(s): " + "; ".join(shown)
+    if len(warnings) > len(shown):
+        detail += f" (+{len(warnings) - len(shown)} more)"
+    return detail
+
+
 def build_csv(cards: list) -> str:
     """Build Kotoba's native custom-deck CSV: header row, comma-delimited,
     leading BOM (matching Kotoba's own exporter so the import round-trips).

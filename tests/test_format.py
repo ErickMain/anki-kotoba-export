@@ -149,6 +149,27 @@ def test_validate_cards_clean_deck_has_no_warnings():
     assert kf.validate_cards([card]) == []
 
 
+def test_summarize_warnings_empty_list_is_blank():
+    assert kf.summarize_warnings([]) == ""
+
+
+def test_summarize_warnings_shows_all_when_within_max():
+    assert kf.summarize_warnings(["a", "b"]) == "2 warning(s): a; b"
+
+
+def test_summarize_warnings_truncates_and_counts_remainder():
+    warnings = [f"w{i}" for i in range(5)]
+    result = kf.summarize_warnings(warnings, max_shown=3)
+    assert result == "5 warning(s): w0; w1; w2 (+2 more)"
+
+
+def test_summarize_warnings_exactly_at_max_shown_has_no_remainder_note():
+    warnings = ["a", "b", "c"]
+    result = kf.summarize_warnings(warnings, max_shown=3)
+    assert result == "3 warning(s): a; b; c"
+    assert "more" not in result
+
+
 def test_validate_cards_uses_shorter_limit_for_image_questions():
     # Fits under TEXT's 400-char cap but not IMAGE's 20-char cap.
     question = "a" * 30

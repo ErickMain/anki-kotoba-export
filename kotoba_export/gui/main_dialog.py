@@ -27,6 +27,7 @@ from ..kotoba.presets import (
     load_presets,
     presets_from_json,
     presets_to_json,
+    sanitize_imported_presets,
     upsert_preset,
 )
 from .history_dialog import HistoryDialog
@@ -232,16 +233,7 @@ class MainDialog(QDialog):
             showInfo("That file has no presets in it.", parent=self)
             return
 
-        # An imported file is untrusted input (it may have been shared by
-        # someone else, not just a self-backup) - auto_run_triggers and
-        # deck_links are the two fields with real-world side effects
-        # (unattended uploads, which live Kotoba deck gets overwritten), so
-        # they're reset here rather than carried over verbatim. Everything
-        # else (filters, field mappings, instructions text) is safe to
-        # import as-is.
-        for preset in imported:
-            preset.auto_run_triggers = []
-            preset.deck_links = {}
+        sanitize_imported_presets(imported)  # see presets.py - resets auto-run/deck-link fields
 
         existing_ids = {p.id for p in load_presets(self.config)}
         for preset in imported:
