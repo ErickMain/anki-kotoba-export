@@ -18,12 +18,11 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
   today"-style presets on a routine of review-then-sync, and doesn't carry
   the same "delays Anki closing" risk shutdown does - though it could still
   add a pause right after sync finishes if the upload is slow.
-- **Export duration.** Track and show how long each run took (probably a
-  `duration_seconds` field on `HistoryEntry`, shown as a column in the
-  History dialog). Best guess at intent: a lightweight way to keep an eye
-  on the "shutdown-triggered auto-export can hang Anki's close for ~15s if
-  Kotoba is slow" risk that came up when discussing what's least tested -
-  if that reading is wrong, correct it when this gets picked up.
+- **Export duration.** Add a `duration_seconds` field to `HistoryEntry`,
+  timing each run (search + build + delivery) and shown as a column in the
+  History dialog - confirmed: how many seconds the export took to
+  complete. Doubles as a way to keep an eye on the "shutdown-triggered
+  auto-export can hang Anki's close for ~15s if Kotoba is slow" risk.
 
 ## Bigger / optional
 
