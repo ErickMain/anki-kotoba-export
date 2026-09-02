@@ -86,6 +86,7 @@ def build_cards_for_preset(col, preset) -> ExportResult:
         question = values.get(preset.question_source, "")
         answer_text = values.get(preset.answer_source, "")
         comment = "" if preset.comment_source == "none" else values.get(preset.comment_source, "")
+        comment = clean.format_comment_sections(comment)
         comment = clean.truncate_text(comment, min(preset.comment_max_length, kotoba_format.COMMENT_MAX_LENGTH))
         answers = [a.strip() for a in _ANSWER_SPLIT_RE.split(answer_text) if a.strip()]
 

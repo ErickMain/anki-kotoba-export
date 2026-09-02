@@ -82,3 +82,64 @@ def test_truncate_text_hard_cuts_dense_text_with_no_good_space():
 
 def test_truncate_text_noop_for_non_positive_length():
     assert clean.truncate_text("hello", 0) == "hello"
+
+
+def test_truncate_text_prefers_a_newline_break_over_a_hard_cut():
+    text = "first section" + "\n" + ("x" * 30)
+    result = clean.truncate_text(text, 20)
+    assert result == "first section…"
+
+
+# format_comment_sections - real excerpts from mined (Yomitan/Jitendex-style)
+# notes, where several dictionaries end up concatenated into one field with
+# no separator at all.
+
+
+def test_format_comment_sections_splits_jitendex_and_kokugo_dictionaries():
+    # Shortened version of the actual 入門 comment field.
+    text = (
+        "(★, Jitendex.org [2026-04-04]) noun entering through a gateJMdict"
+        "(大辞林 第四版) にゅうもん(にふ—)【入門】（名）スル"
+        "(新和英大辞典 第5版) にゅうもん【入門】1 〔弟子入り〕"
+        "(JMdict) にゅうもん【入門】〔n・vi・vs〕1 becoming a pupil (of)"
+    )
+    result = clean.format_comment_sections(text)
+    sections = result.split("\n")
+    assert sections[0] == "(★, Jitendex.org [2026-04-04]) noun entering through a gate"
+    assert sections[1] == "JMdict"
+    assert sections[2].startswith("(大辞林 第四版)")
+    assert sections[3].startswith("(新和英大辞典 第5版)")
+    assert sections[4].startswith("(JMdict)")
+    # Nothing was dropped - only whitespace inserted.
+    assert result.replace("\n", "") == text
+
+
+def test_format_comment_sections_splits_trailing_jmdict_tatoeba_footer():
+    text = "The spider responds with a swift attack.JMdict | Tatoeba"
+    result = clean.format_comment_sections(text)
+    assert result == "The spider responds with a swift attack.\nJMdict | Tatoeba"
+
+
+def test_format_comment_sections_does_not_split_incidental_parens():
+    # Real JMdict gloss text (とうてい) - "(cannot)"/"(not)" are legitimate
+    # parenthetical gloss content, not dictionary-name markers, and must be
+    # left alone: this is exactly the "full parsing is too fragile" case
+    # that ruled out trying to pick a single dictionary.
+    text = "(cannot) possibly | (not) by any means | (not) at all | utterly | absolutely"
+    assert clean.format_comment_sections(text) == text
+
+
+def test_format_comment_sections_no_marker_at_all_is_unchanged():
+    text = "just a plain comment with no dictionary markers"
+    assert clean.format_comment_sections(text) == text
+
+
+def test_format_comment_sections_marker_at_the_very_start_gets_no_leading_break():
+    text = "(JMdict) some gloss"
+    result = clean.format_comment_sections(text)
+    assert not result.startswith("\n")
+    assert result == text
+
+
+def test_format_comment_sections_empty_input():
+    assert clean.format_comment_sections("") == ""

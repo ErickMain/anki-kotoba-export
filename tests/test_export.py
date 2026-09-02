@@ -119,6 +119,18 @@ def test_build_cards_caps_huge_mined_comment():
     assert result.cards[0].comment.endswith("…")
 
 
+def test_build_cards_splits_concatenated_dictionaries_in_comment():
+    meaning = "(★, Jitendex.org [2026-01-04]) noun counterattackJMdict(大辞林 第四版) はんげき（名）"
+    notes = {1: FakeNote("Japanese", {"Expression": "反撃", "Reading": "はんげき", "Meaning": meaning}, nid=1)}
+    col = FakeCollection(notes)
+    preset = _make_preset()
+
+    result = export.build_cards_for_preset(col, preset)
+
+    assert "\n" in result.cards[0].comment
+    assert result.cards[0].comment.startswith("(★, Jitendex.org [2026-01-04])")
+
+
 def test_build_cards_respects_custom_comment_max_length():
     notes = {1: FakeNote("Japanese", {"Expression": "猫", "Reading": "ねこ", "Meaning": "a" * 100}, nid=1)}
     col = FakeCollection(notes)

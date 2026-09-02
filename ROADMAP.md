@@ -2,15 +2,6 @@
 
 Ideas for kotoba_export, not yet built. Pick from here next session.
 
-## Strong candidates
-
-- **Smarter comment formatting.** Instead of just truncating, insert a
-  separator before recognized "(DictionaryName)" citation patterns so a long
-  mined comment reads as distinct dictionary entries rather than one
-  run-on wall of text. Lower-risk than trying to fully parse and keep only
-  one dictionary (rejected earlier - too fragile, dictionary entries contain
-  parentheses mid-definition too).
-
 ## Bigger / optional
 
 - **"Run all" / one-click daily routine.** Fire off several presets (e.g.
@@ -43,8 +34,12 @@ export/import presets (JSON, upserts by id), multiple note types per preset
 single-note-type presets), "open in Browser" from a right-clicked preview
 row (tracks source note id(s) through duplicate-question merging),
 duplicate/clone a preset (fresh id, no shared deck_links, opens the editor
-for tweaking before it's saved), `.ankiaddon` packaging, GitHub repo with
-tagged releases carrying the packaged addon
+for tweaking before it's saved), smarter comment formatting (line break
+before a recognized dictionary-source marker like "(大辞林 第四版)" or
+"(JMdict)", verified against real mined data with no false positives on
+incidental parens like "(cannot)" - confirmed rendering as real line breaks
+in Discord), `.ankiaddon` packaging, GitHub repo with tagged releases
+carrying the packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 

@@ -91,16 +91,59 @@ def truncate_text(text: str, max_length: int) -> str:
     fields like Comment, where mined notes often carry several dictionaries'
     worth of glosses concatenated together - far past what a quiz hint
     should be, and past Kotoba's own length limit. Prefers cutting at the
-    last space before the limit so a word isn't split in half, but falls
-    back to a hard cut if there's no reasonably-placed space (e.g. dense
-    Japanese text with none).
+    last space or newline before the limit so a word (or, after
+    format_comment_sections, a dictionary section) isn't split in half, but
+    falls back to a hard cut if there's no reasonably-placed break (e.g.
+    dense Japanese text with none).
     """
     if max_length <= 0 or len(text) <= max_length:
         return text
 
     limit = max(max_length - len(_ELLIPSIS), 0)
     cut = text[:limit]
-    last_space = cut.rfind(" ")
-    if last_space > limit * 0.6:
-        cut = cut[:last_space]
+    last_break = max(cut.rfind(" "), cut.rfind("\n"))
+    if last_break > limit * 0.6:
+        cut = cut[:last_break]
     return cut.rstrip() + _ELLIPSIS
+
+
+# Mined notes (Yomitan/Jitendex-style) often concatenate several
+# dictionaries' worth of glosses into one field with zero separator between
+# them, e.g. "...entering through a gateJMdict(大辞林 第四版) にゅうもん...".
+# These are the shapes that reliably mark a new dictionary section starting
+# in that kind of text, checked against real exports:
+#   - "(★, Jitendex.org [2026-01-04])" - Jitendex's own priority/source stamp
+#   - "(大辞林 第四版)" / "(新和英大辞典 第5版)" - a Japanese dictionary name
+#     followed by an edition marker (第<N>版)
+#   - "(JMdict)" or a bare trailing "JMdict" / "JMdict | Tatoeba" - JMdict's
+#     ubiquitous attribution, with or without parens
+# Deliberately narrow: a generic aside like "(cannot) possibly | (not) by
+# any means" (real JMdict gloss text) must NOT match, since full parsing to
+# pick a single "right" dictionary was already tried and rejected as too
+# fragile - this only ever inserts whitespace, never drops content.
+_DICTIONARY_MARKER_RE = re.compile(
+    r"\("
+    r"(?:"
+    r"[^()]*★[^()]*"
+    r"|[^()]*(?:https?://|\.(?:org|com|net|edu|io|jp)\b|\[\d{4}-\d{2}-\d{2}\])[^()]*"
+    r"|[^()]*第[0-9一二三四五六七八九十]+版[^()]*"
+    r"|JMdict"
+    r")"
+    r"\)"
+    r"|JMdict(?:\s*\|\s*Tatoeba)?"
+)
+
+
+def format_comment_sections(text: str) -> str:
+    """Insert a newline before each recognized dictionary-source marker (see
+    _DICTIONARY_MARKER_RE) so a long mined comment reads as distinct
+    dictionary entries instead of one run-on wall of text. A comment with no
+    recognized markers - or just one, at the very start - is returned as-is.
+    """
+    if not text:
+        return text
+
+    def _break_before(match):
+        return match.group(0) if match.start() == 0 else "\n" + match.group(0)
+
+    return _DICTIONARY_MARKER_RE.sub(_break_before, text)
