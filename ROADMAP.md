@@ -13,11 +13,6 @@ Ideas for kotoba_export, not yet built. Pick from here next session.
   today"-style presets on a routine of review-then-sync, and doesn't carry
   the same "delays Anki closing" risk shutdown does - though it could still
   add a pause right after sync finishes if the upload is slow.
-- **Export duration.** Add a `duration_seconds` field to `HistoryEntry`,
-  timing each run (search + build + delivery) and shown as a column in the
-  History dialog - confirmed: how many seconds the export took to
-  complete. Doubles as a way to keep an eye on the "shutdown-triggered
-  auto-export can hang Anki's close for ~15s if Kotoba is slow" risk.
 
 ## Bigger / optional
 
@@ -53,10 +48,14 @@ in Discord), "run all" (multi-select the preset list, ctrl/shift-click, and
 Run fires each one's preview in turn - e.g. forgotten today + due + leeches
 in one action), export history log (main dialog -> History..., a capped
 log of every export - manual and automatic - with preset/deck/card
-count/outcome/trigger), export history to CSV (History -> Export to
-CSV..., chronological, UTF-8 with BOM so Japanese preset/deck names open
-cleanly in Excel), scheduled/automatic export (per-preset "Automatic
-export: startup/shutdown/both", gated by a global switch in Advanced
+count/outcome/trigger/duration), export history to CSV (History -> Export
+to CSV..., chronological, UTF-8 with BOM so Japanese preset/deck names
+open cleanly in Excel), export duration (a Duration column on every
+history entry - for manual runs, just the delivery action's own time; for
+automatic runs, the full search+build+upload, i.e. exactly what could
+delay Anki's startup/shutdown; the automatic-export completion toast
+reports total elapsed time too), scheduled/automatic export (per-preset
+"Automatic export: startup/shutdown/both", gated by a global switch in Advanced
 settings so nothing runs unless both are explicitly on; unattended runs
 always go through direct-API upload and log to history even when skipped,
 so a misconfiguration is visible instead of silent; verified end-to-end

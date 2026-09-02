@@ -2,6 +2,8 @@
 paths: clipboard+browser (always available) or direct API upload (only when
 advanced mode is configured with a session cookie).
 """
+import time
+
 from aqt import dialogs, mw
 from aqt.qt import (
     QAbstractItemView,
@@ -133,7 +135,7 @@ class PreviewDialog(QDialog):
     def _csv_text(self) -> str:
         return kotoba_format.build_csv(self.result.cards)
 
-    def _log_history(self, outcome: str, deck_name: str, detail: str = ""):
+    def _log_history(self, outcome: str, deck_name: str, detail: str = "", duration_seconds: float = 0.0):
         entry = history.new_entry(
             preset_name=self.preset.name,
             deck_name=deck_name,
@@ -141,14 +143,19 @@ class PreviewDialog(QDialog):
             outcome=outcome,
             triggered_by=self.triggered_by,
             detail=detail,
+            duration_seconds=duration_seconds,
         )
         history.append_entry(self.config, entry)
         config_store.save_config(self.config)
 
     def _copy_and_open(self):
+        start = time.perf_counter()
         QApplication.clipboard().setText(self._csv_text())
         openLink(KOTOBA_DASHBOARD_URL)
-        self._log_history(history.OUTCOME_COPIED, self.deck_name_edit.text().strip() or self.result.deck_name)
+        elapsed = time.perf_counter() - start
+        self._log_history(
+            history.OUTCOME_COPIED, self.deck_name_edit.text().strip() or self.result.deck_name, duration_seconds=elapsed
+        )
         showInfo(
             "CSV copied to your clipboard and kotobaweb.com opened in your browser.\n\n"
             f"In Kotoba: New Custom Deck -> name it \"{self.deck_name_edit.text()}\" -> "
@@ -162,9 +169,16 @@ class PreviewDialog(QDialog):
         )
         if not path:
             return
+        start = time.perf_counter()
         with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(self._csv_text())
-        self._log_history(history.OUTCOME_SAVED, self.deck_name_edit.text().strip() or self.result.deck_name, detail=path)
+        elapsed = time.perf_counter() - start
+        self._log_history(
+            history.OUTCOME_SAVED,
+            self.deck_name_edit.text().strip() or self.result.deck_name,
+            detail=path,
+            duration_seconds=elapsed,
+        )
         tooltip(f"Saved to {path}", parent=self)
 
     def _upload_direct(self):
@@ -172,18 +186,21 @@ class PreviewDialog(QDialog):
         deck_name = self.deck_name_edit.text().strip() or self.result.deck_name
 
         self.setCursor(QCursor(Qt.CursorShape.WaitCursor))
+        start = time.perf_counter()
         try:
             upload_mod.upload_deck(cookie, self.preset, self.result.cards, deck_name)
         except kotoba_api.KotobaApiError as exc:
-            self._log_history(history.OUTCOME_ERROR, deck_name, detail=str(exc))
+            elapsed = time.perf_counter() - start
+            self._log_history(history.OUTCOME_ERROR, deck_name, detail=str(exc), duration_seconds=elapsed)
             showWarning(str(exc), parent=self)
             return
         finally:
             self.unsetCursor()
+        elapsed = time.perf_counter() - start
 
         if self.on_preset_updated:
             self.on_preset_updated(self.preset)
-        self._log_history(history.OUTCOME_UPLOADED, deck_name)
+        self._log_history(history.OUTCOME_UPLOADED, deck_name, duration_seconds=elapsed)
 
         showInfo(
             f"Uploaded to Kotoba as \"{deck_name}\".",

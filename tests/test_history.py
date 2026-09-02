@@ -12,6 +12,14 @@ def test_new_entry_uses_iso_timestamp():
     assert entry.detail == ""
 
 
+def test_new_entry_duration_defaults_to_zero_and_rounds():
+    entry = history.new_entry("A", "Deck A", 1, history.OUTCOME_SKIPPED)
+    assert entry.duration_seconds == 0.0
+
+    timed = history.new_entry("A", "Deck A", 1, history.OUTCOME_UPLOADED, duration_seconds=1.23456)
+    assert timed.duration_seconds == 1.23
+
+
 def test_append_and_load_roundtrip():
     config = {}
     entry = history.new_entry("A", "Deck A", 5, history.OUTCOME_COPIED)
@@ -59,12 +67,13 @@ def test_history_to_csv_header_and_row():
         12,
         history.OUTCOME_UPLOADED,
         triggered_by=history.TRIGGER_AUTO_STARTUP,
+        duration_seconds=2.345,
         now=datetime(2026, 9, 2, 14, 23, 1),
     )
     csv_text = history.history_to_csv([entry])
 
-    assert csv_text.startswith("Timestamp,Preset,Deck,Cards,Outcome,Trigger,Detail")
-    assert "2026-09-02T14:23:01,Forgotten Today,Anki Forgotten Today,12,uploaded,startup," in csv_text
+    assert csv_text.startswith("Timestamp,Preset,Deck,Cards,Outcome,Trigger,Duration (s),Detail")
+    assert "2026-09-02T14:23:01,Forgotten Today,Anki Forgotten Today,12,uploaded,startup,2.35," in csv_text
 
 
 def test_history_to_csv_includes_detail_and_quotes_commas():
@@ -79,7 +88,7 @@ def test_history_to_csv_includes_detail_and_quotes_commas():
 
 def test_history_to_csv_empty_list_is_header_only():
     csv_text = history.history_to_csv([])
-    assert csv_text.strip() == "Timestamp,Preset,Deck,Cards,Outcome,Trigger,Detail"
+    assert csv_text.strip() == "Timestamp,Preset,Deck,Cards,Outcome,Trigger,Duration (s),Detail"
 
 
 def test_history_to_csv_preserves_given_order():

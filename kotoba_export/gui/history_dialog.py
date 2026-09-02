@@ -20,7 +20,7 @@ from aqt.utils import showInfo, tooltip
 from .. import config_store
 from ..kotoba import history
 
-_COLUMNS = ["When", "Preset", "Deck", "Cards", "Outcome", "Trigger"]
+_COLUMNS = ["When", "Preset", "Deck", "Cards", "Outcome", "Trigger", "Duration"]
 
 
 class HistoryDialog(QDialog):
@@ -71,6 +71,7 @@ class HistoryDialog(QDialog):
                 str(entry.card_count),
                 outcome,
                 entry.triggered_by,
+                f"{entry.duration_seconds:.1f}s",
             ]
             for col, value in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(value))

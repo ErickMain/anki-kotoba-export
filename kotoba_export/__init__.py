@@ -2,6 +2,8 @@
 reading!" custom decks, with saved presets for recurring study sessions
 (forgotten today, leeches, suspended, by tag, ...).
 """
+import time
+
 from aqt import gui_hooks, mw
 from aqt.qt import QAction
 from aqt.utils import showInfo, tooltip
@@ -39,6 +41,7 @@ def _run_auto_presets(trigger: str):
     and the loop moves on, so one bad preset can't hang or crash Anki's own
     startup/shutdown sequence.
     """
+    run_start = time.perf_counter()
     config = config_store.get_config()
     adv = config.get("advanced", {})
     cookie = adv.get("session_cookie", "")
@@ -64,6 +67,7 @@ def _run_auto_presets(trigger: str):
             )
             continue
 
+        start = time.perf_counter()
         try:
             query = export_mod.build_query_for_preset(preset)
             if not query.strip():
@@ -76,6 +80,7 @@ def _run_auto_presets(trigger: str):
                         history.OUTCOME_SKIPPED,
                         trigger,
                         detail="No search filters set - would match the whole collection, skipped for safety.",
+                        duration_seconds=time.perf_counter() - start,
                     ),
                 )
                 continue
@@ -84,7 +89,14 @@ def _run_auto_presets(trigger: str):
             if not result.cards:
                 config = history.append_entry(
                     config,
-                    history.new_entry(preset.name, result.deck_name, 0, history.OUTCOME_NO_CARDS, trigger),
+                    history.new_entry(
+                        preset.name,
+                        result.deck_name,
+                        0,
+                        history.OUTCOME_NO_CARDS,
+                        trigger,
+                        duration_seconds=time.perf_counter() - start,
+                    ),
                 )
                 continue
 
@@ -93,18 +105,33 @@ def _run_auto_presets(trigger: str):
             config = history.append_entry(
                 config,
                 history.new_entry(
-                    preset.name, result.deck_name, len(result.cards), history.OUTCOME_UPLOADED, trigger
+                    preset.name,
+                    result.deck_name,
+                    len(result.cards),
+                    history.OUTCOME_UPLOADED,
+                    trigger,
+                    duration_seconds=time.perf_counter() - start,
                 ),
             )
             uploaded += 1
         except Exception as exc:  # noqa: BLE001 - see docstring
             config = history.append_entry(
-                config, history.new_entry(preset.name, "", 0, history.OUTCOME_ERROR, trigger, detail=str(exc))
+                config,
+                history.new_entry(
+                    preset.name,
+                    "",
+                    0,
+                    history.OUTCOME_ERROR,
+                    trigger,
+                    detail=str(exc),
+                    duration_seconds=time.perf_counter() - start,
+                ),
             )
 
     config_store.save_config(config)
     if uploaded:
-        tooltip(f"Kotoba Export: automatically uploaded {uploaded} deck(s) on {trigger}.")
+        total_elapsed = time.perf_counter() - run_start
+        tooltip(f"Kotoba Export: automatically uploaded {uploaded} deck(s) on {trigger} ({total_elapsed:.1f}s).")
 
 
 def _setup():

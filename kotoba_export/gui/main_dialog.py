@@ -2,6 +2,8 @@
 advanced settings. Also handles the ad-hoc "export this selection" path
 invoked from the Anki Browser.
 """
+import time
+
 from aqt import mw
 from aqt.qt import (
     QAbstractItemView,
@@ -258,11 +260,15 @@ class MainDialog(QDialog):
             ):
                 return
 
+        start = time.perf_counter()
         result = export_mod.build_cards_for_preset(mw.col, preset)
+        elapsed = time.perf_counter() - start
         if not result.cards:
             self.config = history.append_entry(
                 self.config,
-                history.new_entry(preset.name, result.deck_name, 0, history.OUTCOME_NO_CARDS, triggered_by),
+                history.new_entry(
+                    preset.name, result.deck_name, 0, history.OUTCOME_NO_CARDS, triggered_by, duration_seconds=elapsed
+                ),
             )
             config_store.save_config(self.config)
             showInfo(f'No matching cards found for "{preset.name}".', parent=self)

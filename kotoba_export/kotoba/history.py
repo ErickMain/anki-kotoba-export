@@ -35,6 +35,13 @@ class HistoryEntry:
     outcome: str
     triggered_by: str = TRIGGER_MANUAL
     detail: str = ""
+    # Wall-clock time the logged action itself took, in seconds - for a
+    # manual copy/save/upload that's just that one action (not however long
+    # the preview dialog happened to sit open first); for an automatic
+    # run it's search+build+upload combined, since that's the part that can
+    # actually delay Anki's own startup/shutdown. 0.0 for outcomes where
+    # nothing timed actually ran (e.g. a deliberate skip).
+    duration_seconds: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -52,6 +59,7 @@ def new_entry(
     outcome: str,
     triggered_by: str = TRIGGER_MANUAL,
     detail: str = "",
+    duration_seconds: float = 0.0,
     now: datetime = None,
 ) -> HistoryEntry:
     return HistoryEntry(
@@ -62,6 +70,7 @@ def new_entry(
         outcome=outcome,
         triggered_by=triggered_by,
         detail=detail,
+        duration_seconds=round(duration_seconds, 2),
     )
 
 
@@ -82,7 +91,7 @@ def clear_history(config: dict) -> dict:
     return config
 
 
-CSV_HEADER_ROW = ["Timestamp", "Preset", "Deck", "Cards", "Outcome", "Trigger", "Detail"]
+CSV_HEADER_ROW = ["Timestamp", "Preset", "Deck", "Cards", "Outcome", "Trigger", "Duration (s)", "Detail"]
 
 
 def history_to_csv(entries: list) -> str:
@@ -105,6 +114,7 @@ def history_to_csv(entries: list) -> str:
                 entry.card_count,
                 entry.outcome,
                 entry.triggered_by,
+                entry.duration_seconds,
                 entry.detail,
             ]
         )
