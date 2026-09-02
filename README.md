@@ -31,6 +31,7 @@ To package it for sharing/AnkiWeb instead, zip the *contents* of `kotoba_export/
 1. **Tools -> Kotoba Export... -> New...** to create a preset: pick a note type, map its fields to Expression / Reading (kana) / Meaning, choose which state/tag filters to match (Forgotten today, Leech, Suspended, Due, tags, or a raw Anki search), and set the instructions text (defaults to "Type the reading!").
 2. **Run** a preset (or select notes in the Browser and use **Export selected to Kotoba...**) to preview the matched cards, then either copy the CSV + open Kotoba, save it as a file, or (advanced mode) upload directly.
 3. Presets set to "Overwrite same deck" only work in advanced mode, since re-using a deck requires remembering its Kotoba deck id and edit secret between runs.
+4. **Export presets... / Import presets...** back up your presets to a JSON file or move them to another machine. This only covers presets - not your advanced-mode session cookie, and not the `.ankiaddon` package itself (that's the code; see Install above). Importing upserts by id, so re-importing the same file updates existing presets rather than duplicating them; note type and field mappings should be double-checked after importing onto a different collection, since they're matched by name.
 
 ## Development
 

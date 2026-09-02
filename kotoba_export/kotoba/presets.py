@@ -6,6 +6,7 @@ fields map onto Kotoba's Question/Answers/Comment columns, and how the
 resulting deck should be named/reused on Kotoba.
 """
 import dataclasses
+import json
 import uuid
 from dataclasses import asdict, dataclass, field
 
@@ -115,3 +116,28 @@ def upsert_preset(config: dict, preset: Preset) -> dict:
 def delete_preset(config: dict, preset_id: str) -> dict:
     presets = [p for p in load_presets(config) if p.id != preset_id]
     return save_presets(config, presets)
+
+
+def presets_to_json(presets: list) -> str:
+    """Serialize presets for backup/transfer to another machine. Note this
+    carries field/note-type *names*, not Anki's internal ids - they won't
+    resolve on a collection where those names don't exist, which is the
+    caller's job to warn about after import.
+    """
+    return json.dumps([p.to_dict() for p in presets], indent=2, ensure_ascii=False)
+
+
+def presets_from_json(text: str) -> list:
+    """Inverse of presets_to_json. Raises ValueError on anything malformed
+    (not a JSON array, an entry missing id/name) so callers can show one
+    clear message instead of a raw traceback."""
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise ValueError("Expected a JSON array of presets.")
+
+    presets = []
+    for i, entry in enumerate(data, start=1):
+        if not isinstance(entry, dict) or "id" not in entry or "name" not in entry:
+            raise ValueError(f"Entry {i} is missing required fields (id, name).")
+        presets.append(Preset.from_dict(entry))
+    return presets

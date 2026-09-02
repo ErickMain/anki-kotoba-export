@@ -3,12 +3,28 @@ advanced settings. Also handles the ad-hoc "export this selection" path
 invoked from the Anki Browser.
 """
 from aqt import mw
-from aqt.qt import QDialog, QDialogButtonBox, QHBoxLayout, QListWidget, QMessageBox, QPushButton, QVBoxLayout
-from aqt.utils import showInfo, showWarning
+from aqt.qt import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QHBoxLayout,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
+from aqt.utils import showInfo, showWarning, tooltip
 
 from .. import config_store
 from ..kotoba import export as export_mod
-from ..kotoba.presets import Preset, delete_preset, load_presets, upsert_preset
+from ..kotoba.presets import (
+    Preset,
+    delete_preset,
+    load_presets,
+    presets_from_json,
+    presets_to_json,
+    upsert_preset,
+)
 from .preset_editor import PresetEditorDialog
 from .preview_dialog import PreviewDialog
 from .settings_dialog import SettingsDialog
@@ -56,6 +72,21 @@ class MainDialog(QDialog):
         settings_btn = QPushButton("Advanced settings...")
         settings_btn.clicked.connect(self._open_settings)
         layout.addWidget(settings_btn)
+
+        io_row = QHBoxLayout()
+        export_btn = QPushButton("Export presets...")
+        export_btn.setToolTip("Save all your presets to a JSON file - for backup, or to move them to another machine.")
+        export_btn.clicked.connect(self._export_presets)
+        io_row.addWidget(export_btn)
+
+        import_btn = QPushButton("Import presets...")
+        import_btn.setToolTip(
+            "Load presets from a JSON file exported here. Existing presets with the same id are "
+            "updated, not duplicated. Field/note-type names may need re-checking on a different collection."
+        )
+        import_btn.clicked.connect(self._import_presets)
+        io_row.addWidget(import_btn)
+        layout.addLayout(io_row)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
@@ -122,6 +153,53 @@ class MainDialog(QDialog):
         dlg = SettingsDialog(self, self.config)
         if dlg.exec():
             config_store.save_config(self.config)
+
+    def _export_presets(self):
+        presets = load_presets(self.config)
+        if not presets:
+            showInfo("No presets to export yet.", parent=self)
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Kotoba Export Presets", "kotoba_export_presets.json", "JSON (*.json)"
+        )
+        if not path:
+            return
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(presets_to_json(presets))
+        tooltip(f"Exported {len(presets)} preset(s) to {path}", parent=self)
+
+    def _import_presets(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import Kotoba Export Presets", "", "JSON (*.json)")
+        if not path:
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                imported = presets_from_json(f.read())
+        except (OSError, ValueError) as exc:
+            showWarning(f"Could not import presets:\n\n{exc}", parent=self)
+            return
+
+        if not imported:
+            showInfo("That file has no presets in it.", parent=self)
+            return
+
+        existing_ids = {p.id for p in load_presets(self.config)}
+        for preset in imported:
+            self.config = upsert_preset(self.config, preset)
+        config_store.save_config(self.config)
+        self._reload_list()
+
+        updated = sum(1 for p in imported if p.id in existing_ids)
+        added = len(imported) - updated
+        showInfo(
+            f"Imported {len(imported)} preset(s): {added} new, {updated} updated.\n\n"
+            "Double-check note type and field mappings on each - they won't resolve if this "
+            "collection doesn't have the same note type/field names.",
+            parent=self,
+        )
 
     def _run_preset(self, preset, persist_updates: bool):
         if not export_mod.build_query_for_preset(preset).strip():

@@ -2,14 +2,6 @@
 
 Ideas for kotoba_export, not yet built. Pick from here next session.
 
-## Committed (requested 2026-09-01)
-
-- **Export/import presets.** Right now presets live only in Anki's profile
-  config store - the `.ankiaddon` package backs up the *code*, not your
-  presets or advanced settings. Add a "Export presets to file" / "Import
-  presets from file" pair (JSON) in the main dialog so presets can be backed
-  up or moved to another machine on their own.
-
 ## Strong candidates
 
 - **Multiple note types per preset.** A preset currently matches exactly one
@@ -59,8 +51,8 @@ query builder (state chips + tags + deck + raw search), field mapping with
 Image/Text render choice, duplicate-question auto-merge, comment length
 capping, citation-pattern sanity warning, ruby-tag (`<ruby><rt>`) furigana
 resolution, name-keyed deck overwrite linking, deck manager (list/delete),
-`.ankiaddon` packaging, GitHub repo with tagged releases carrying the
-packaged addon
+export/import presets (JSON, upserts by id), `.ankiaddon` packaging, GitHub
+repo with tagged releases carrying the packaged addon
 ([ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export),
 first release: [v0.1.0](https://github.com/ErickMain/anki-kotoba-export/releases/tag/v0.1.0)).
 
