@@ -149,6 +149,53 @@ def test_validate_cards_clean_deck_has_no_warnings():
     assert kf.validate_cards([card]) == []
 
 
+def test_cards_fingerprint_is_deterministic_for_equivalent_content():
+    make = lambda: [kf.KotobaCard(question="猫", answers=["ねこ"], comment="cat", instructions="Type the reading!")]
+    assert kf.cards_fingerprint(make()) == kf.cards_fingerprint(make())
+
+
+def test_cards_fingerprint_changes_when_any_field_changes():
+    base = [
+        kf.KotobaCard(
+            question="猫", answers=["ねこ"], comment="cat", instructions="Type the reading!", render_as=kf.RENDER_AS_TEXT
+        )
+    ]
+    variants = [
+        [kf.KotobaCard(question="犬", answers=["ねこ"], comment="cat", instructions="Type the reading!", render_as=kf.RENDER_AS_TEXT)],
+        [kf.KotobaCard(question="猫", answers=["いぬ"], comment="cat", instructions="Type the reading!", render_as=kf.RENDER_AS_TEXT)],
+        [kf.KotobaCard(question="猫", answers=["ねこ"], comment="dog", instructions="Type the reading!", render_as=kf.RENDER_AS_TEXT)],
+        [kf.KotobaCard(question="猫", answers=["ねこ"], comment="cat", instructions="Different instructions", render_as=kf.RENDER_AS_TEXT)],
+        [kf.KotobaCard(question="猫", answers=["ねこ"], comment="cat", instructions="Type the reading!", render_as=kf.RENDER_AS_IMAGE)],
+    ]
+    base_hash = kf.cards_fingerprint(base)
+    for variant in variants:
+        assert kf.cards_fingerprint(variant) != base_hash
+
+
+def test_cards_fingerprint_is_sensitive_to_card_order():
+    a = kf.KotobaCard(question="猫", answers=["ねこ"])
+    b = kf.KotobaCard(question="犬", answers=["いぬ"])
+    assert kf.cards_fingerprint([a, b]) != kf.cards_fingerprint([b, a])
+
+
+def test_cards_fingerprint_does_not_collide_across_field_boundaries():
+    # Two different card sets that would hash identically under naive
+    # concatenation (no separator) must not collide.
+    a = [kf.KotobaCard(question="ab", answers=["c"])]
+    b = [kf.KotobaCard(question="a", answers=["bc"])]
+    assert kf.cards_fingerprint(a) != kf.cards_fingerprint(b)
+
+
+def test_cards_fingerprint_ignores_source_note_ids():
+    a = kf.KotobaCard(question="猫", answers=["ねこ"], source_note_ids=[1])
+    b = kf.KotobaCard(question="猫", answers=["ねこ"], source_note_ids=[2, 3])
+    assert kf.cards_fingerprint([a]) == kf.cards_fingerprint([b])
+
+
+def test_cards_fingerprint_empty_list_is_stable():
+    assert kf.cards_fingerprint([]) == kf.cards_fingerprint([])
+
+
 def test_summarize_warnings_empty_list_is_blank():
     assert kf.summarize_warnings([]) == ""
 

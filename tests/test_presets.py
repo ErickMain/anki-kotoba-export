@@ -108,6 +108,39 @@ def test_duplicate_does_not_carry_over_deck_links():
     assert p.get_deck_link("Forgotten Today") == {"id": "deck123", "secret": "secret456"}
 
 
+def test_last_upload_hash_roundtrip():
+    p = Preset.new("Forgotten Today")
+    assert p.get_last_upload_hash("Forgotten Today") is None
+
+    p.set_last_upload_hash("Forgotten Today", "abc123")
+    assert p.get_last_upload_hash("Forgotten Today") == "abc123"
+
+
+def test_last_upload_hash_is_keyed_by_exact_deck_name():
+    p = Preset.new("Forgotten Today")
+    p.set_last_upload_hash("Forgotten Today", "abc123")
+    assert p.get_last_upload_hash("Forgotten Today - 2026-09-02") is None
+
+
+def test_last_upload_hash_survives_config_roundtrip():
+    p = Preset.new("Forgotten Today")
+    p.set_last_upload_hash("Forgotten Today", "abc123")
+    config = save_presets({}, [p])
+
+    loaded = load_presets(config)[0]
+    assert loaded.get_last_upload_hash("Forgotten Today") == "abc123"
+
+
+def test_duplicate_does_not_carry_over_last_upload_hashes():
+    p = Preset.new("Forgotten Today")
+    p.set_last_upload_hash("Forgotten Today", "abc123")
+    clone = p.duplicate()
+
+    assert clone.get_last_upload_hash("Forgotten Today") is None
+    # The original is untouched.
+    assert p.get_last_upload_hash("Forgotten Today") == "abc123"
+
+
 def test_duplicate_copies_note_type_mappings_independently():
     p = Preset.new("Vocab")
     p.set_field_mapping("Japanese", "Expression", "Reading", "Meaning")

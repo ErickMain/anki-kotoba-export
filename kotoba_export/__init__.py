@@ -124,10 +124,34 @@ def _run_auto_presets(trigger: str):
                 )
                 continue
 
+            # A sync-triggered run fires on every completed AnkiWeb sync -
+            # syncing several times in a row with nothing reviewed in
+            # between would otherwise re-upload byte-identical content each
+            # time, wasting time and pressuring Kotoba's own rate-limited
+            # deck endpoints for no reason. Startup/shutdown/manual runs are
+            # deliberate enough (at most a few times a day) that this check
+            # isn't needed there.
+            fingerprint = kotoba_format.cards_fingerprint(result.cards)
+            if trigger == history.TRIGGER_AUTO_SYNC and preset.get_last_upload_hash(result.deck_name) == fingerprint:
+                config = history.append_entry(
+                    config,
+                    history.new_entry(
+                        preset.name,
+                        result.deck_name,
+                        len(result.cards),
+                        history.OUTCOME_SKIPPED,
+                        trigger,
+                        detail="No changes since the last successful upload - skipped to avoid a redundant Kotoba API call.",
+                        duration_seconds=time.perf_counter() - start,
+                    ),
+                )
+                continue
+
             upload_mod.upload_deck(
                 cookie, preset, result.cards, result.deck_name, max_retries=AUTO_EXPORT_MAX_RETRIES
             )
-            config = upsert_preset(config, preset)  # persists the updated deck_links
+            preset.set_last_upload_hash(result.deck_name, fingerprint)
+            config = upsert_preset(config, preset)  # persists the updated deck_links/last_upload_hashes
             # Uploaded successfully, but validate_cards may still have flagged
             # things Kotoba silently truncates/skips rather than rejects
             # outright (e.g. an oversized comment). The preview dialog shows

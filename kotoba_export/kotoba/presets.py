@@ -136,6 +136,15 @@ class Preset:
     # later run with that same name knows which Kotoba deck to PATCH.
     deck_links: dict = field(default_factory=dict)
 
+    # {rendered_deck_name: sha256 hex fingerprint of the card content (see
+    # kotoba/format.py's cards_fingerprint) last successfully uploaded
+    # there} - independent of deck_links (applies in "new each time" mode
+    # too, where there's no deck_links entry at all). Lets an automatic
+    # sync-triggered export skip a redundant re-upload when nothing has
+    # actually changed since the last successful upload, manual or
+    # automatic.
+    last_upload_hashes: dict = field(default_factory=dict)
+
     @staticmethod
     def new(name: str) -> "Preset":
         return Preset(id=str(uuid.uuid4()), name=name)
@@ -152,6 +161,7 @@ class Preset:
         data["id"] = str(uuid.uuid4())
         data["name"] = new_name if new_name is not None else f"{self.name} (copy)"
         data["deck_links"] = {}
+        data["last_upload_hashes"] = {}
         return Preset.from_dict(data)
 
     def matches_auto_trigger(self, trigger: str) -> bool:
@@ -166,6 +176,12 @@ class Preset:
 
     def set_deck_link(self, deck_name: str, deck_id: str, readwrite_secret: str) -> None:
         self.deck_links[deck_name] = {"id": deck_id, "secret": readwrite_secret}
+
+    def get_last_upload_hash(self, deck_name: str):
+        return self.last_upload_hashes.get(deck_name)
+
+    def set_last_upload_hash(self, deck_name: str, fingerprint: str) -> None:
+        self.last_upload_hashes[deck_name] = fingerprint
 
     def field_mapping_for(self, note_type_name: str):
         """Returns {"expression_field": ..., "reading_field": ..., "meaning_field": ...}

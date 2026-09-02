@@ -5,6 +5,7 @@ constants) so a bad export gets caught locally instead of by a confusing
 rejection on kotobaweb.com.
 """
 import csv
+import hashlib
 import io
 import re
 from dataclasses import dataclass, field
@@ -199,6 +200,28 @@ def validate_cards(cards: list) -> list:
                 f"over Kotoba's {INSTRUCTIONS_MAX_LENGTH} limit."
             )
     return warnings
+
+
+def cards_fingerprint(cards: list) -> str:
+    """A stable hash of exactly the content Kotoba actually receives
+    (question, answers in order, comment, instructions, render_as - see
+    api.py's _cards_payload) - lets an automatic export skip re-uploading a
+    deck whose content is identical to what was last successfully sent, so
+    a burst of AnkiWeb syncs close together (nothing reviewed in between)
+    doesn't hammer Kotoba's rate-limited deck endpoints with redundant
+    PATCHes. Deliberately order-sensitive (a reordering is a real change to
+    what Kotoba would render) and deliberately ignores anything not
+    actually sent, like source_note_ids. Uses a separator not expected in
+    card text so two different card sets can't hash identically just from
+    where a field boundary falls (e.g. "ab"+"c" vs "a"+"bc").
+    """
+    field_sep = "\x1f"
+    card_sep = "\x1e"
+    parts = [
+        field_sep.join([card.question, ",".join(card.answers), card.comment, card.instructions, card.render_as])
+        for card in cards
+    ]
+    return hashlib.sha256(card_sep.join(parts).encode("utf-8")).hexdigest()
 
 
 def summarize_warnings(warnings: list, max_shown: int = 3) -> str:

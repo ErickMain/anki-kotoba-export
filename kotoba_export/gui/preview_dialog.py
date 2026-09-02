@@ -189,6 +189,10 @@ class PreviewDialog(QDialog):
         start = time.perf_counter()
         try:
             upload_mod.upload_deck(cookie, self.preset, self.result.cards, deck_name)
+            # So a later automatic sync-triggered run correctly recognizes
+            # this content as already up to date, even though this upload
+            # was manual (see __init__.py's _run_auto_presets).
+            self.preset.set_last_upload_hash(deck_name, kotoba_format.cards_fingerprint(self.result.cards))
         except kotoba_api.KotobaApiError as exc:
             elapsed = time.perf_counter() - start
             self._log_history(history.OUTCOME_ERROR, deck_name, detail=str(exc), duration_seconds=elapsed)
