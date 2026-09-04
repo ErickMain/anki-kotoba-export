@@ -149,6 +149,12 @@ def validate_cards(cards: list) -> list:
     if len(cards) > MAX_CARDS:
         warnings.append(f"{len(cards)} cards exceeds Kotoba's limit of {MAX_CARDS}.")
 
+    # In practice this never fires through the real export pipeline -
+    # export.py always runs merge_duplicate_questions before calling this,
+    # so no two cards can share a question by the time validate_cards sees
+    # them. Left in (and still unit-tested directly) as real protection for
+    # any caller that doesn't pre-merge, since Kotoba genuinely rejects a
+    # raw deck with duplicate questions.
     seen_questions = {}
     for i, card in enumerate(cards, start=1):
         if card.question.strip():

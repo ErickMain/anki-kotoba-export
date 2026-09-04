@@ -37,6 +37,27 @@ def test_build_query_ignores_blank_deck():
     assert search.build_query(search.QueryFilters(deck="  ")) == ""
 
 
+def test_build_query_escapes_trailing_backslash_in_tag():
+    # A tag ending in a literal backslash used to swallow the closing
+    # quote (Anki's search syntax treats \" inside a quoted term as an
+    # escaped quote, not a terminator) - regression test for F2.
+    filters = search.QueryFilters(tags=["foo\\"])
+    query = search.build_query(filters)
+    assert query == 'tag:"foo\\\\"'
+
+
+def test_build_query_escapes_backslash_before_quote_in_tag():
+    filters = search.QueryFilters(tags=['foo\\"bar'])
+    query = search.build_query(filters)
+    assert query == 'tag:"foo\\\\\\"bar"'
+
+
+def test_build_query_escapes_trailing_backslash_in_deck():
+    filters = search.QueryFilters(deck="Foo\\")
+    query = search.build_query(filters)
+    assert query == 'deck:"Foo\\\\"'
+
+
 def test_find_matching_note_ids_dedupes_across_cards():
     notes = {
         1: FakeNote("Basic", {"Front": "a"}, nid=1),

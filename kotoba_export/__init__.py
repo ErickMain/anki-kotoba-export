@@ -23,6 +23,20 @@ from .kotoba.presets import load_presets_safe, upsert_preset
 AUTO_EXPORT_MAX_RETRIES = 1
 
 
+def _save_config_quietly(config: dict) -> None:
+    """config_store.save_config, but never raises - every call site in
+    _run_auto_presets is reached from a gui_hooks callback that must never
+    let an exception escape (see that function's docstring). There's
+    nowhere left to log a failure here (logging itself goes through this
+    same save), so a failure (disk full, locked file) is swallowed rather
+    than crashing Anki's startup/shutdown/sync sequence.
+    """
+    try:
+        config_store.save_config(config)
+    except Exception:  # noqa: BLE001 - see docstring
+        pass
+
+
 def _open_main_dialog():
     MainDialog(mw).exec()
 
@@ -68,29 +82,34 @@ def _run_auto_presets(trigger: str):
                 detail=f"Could not load presets (config may be corrupted): {load_error}",
             ),
         )
-        config_store.save_config(config)
+        _save_config_quietly(config)
         return
 
     presets = [p for p in all_presets if p.matches_auto_trigger(trigger)]
     if not presets:
         return
 
+    if not ready:
+        # "Not ready" is one fact about the global config, not something
+        # that varies per preset - logging it once (not once per matching
+        # preset) avoids a burst of near-identical history entries the
+        # moment more than one preset has this trigger checked.
+        config = history.append_entry(
+            config,
+            history.new_entry(
+                ", ".join(p.name for p in presets),
+                "",
+                0,
+                history.OUTCOME_SKIPPED,
+                trigger,
+                detail="Automatic export is off, or advanced mode/session cookie isn't configured.",
+            ),
+        )
+        _save_config_quietly(config)
+        return
+
     uploaded = 0
     for preset in presets:
-        if not ready:
-            config = history.append_entry(
-                config,
-                history.new_entry(
-                    preset.name,
-                    "",
-                    0,
-                    history.OUTCOME_SKIPPED,
-                    trigger,
-                    detail="Automatic export is off, or advanced mode/session cookie isn't configured.",
-                ),
-            )
-            continue
-
         start = time.perf_counter()
         try:
             query = export_mod.build_query_for_preset(preset)
@@ -186,7 +205,7 @@ def _run_auto_presets(trigger: str):
                 ),
             )
 
-    config_store.save_config(config)
+    _save_config_quietly(config)
     if uploaded:
         total_elapsed = time.perf_counter() - run_start
         tooltip(f"Kotoba Export: automatically uploaded {uploaded} deck(s) on {trigger} ({total_elapsed:.1f}s).")

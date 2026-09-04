@@ -41,6 +41,7 @@ class MainDialog(QDialog):
         super().__init__(parent or mw)
         self.config = config_store.get_config()
         self.ad_hoc_note_ids = ad_hoc_note_ids
+        self._ad_hoc_cancelled = False
         self.setWindowTitle("Kotoba Export")
         self.resize(420, 440)
         self._build_ui()
@@ -48,6 +49,19 @@ class MainDialog(QDialog):
 
         if ad_hoc_note_ids:
             self._run_ad_hoc()
+
+    def exec(self):
+        # _run_ad_hoc() below runs entirely inside __init__, before the
+        # caller's own .exec() (the usual call pattern is
+        # MainDialog(..., ad_hoc_note_ids=...).exec()). If the user cancels
+        # partway through, self.reject() there is a no-op - QDialog.reject()
+        # only terminates an *already-running* exec() event loop, and this
+        # dialog's first exec() hasn't started yet - so the caller's
+        # subsequent .exec() would show the full preset list anyway. This
+        # override short-circuits that.
+        if self._ad_hoc_cancelled:
+            return QDialog.DialogCode.Rejected
+        return super().exec()
 
     # -- UI ---------------------------------------------------------------
     def _build_ui(self):
@@ -304,7 +318,7 @@ class MainDialog(QDialog):
 
         dlg = PresetEditorDialog(self, preset, self._advanced_enabled())
         if not dlg.exec():
-            self.reject()
+            self._ad_hoc_cancelled = True
             return
 
         self._run_preset(preset, persist_updates=False)

@@ -23,28 +23,24 @@ class QueryFilters:
     deck: str = ""
     raw_query: str = ""
 
-    def is_empty(self) -> bool:
-        return not (
-            self.forgotten_today
-            or self.leech
-            or self.suspended
-            or self.due
-            or self.tags
-            or self.deck.strip()
-            or self.raw_query.strip()
-        )
+
+def _escape_for_quotes(value: str) -> str:
+    # Backslash must be escaped first - escaping the quote alone would let a
+    # tag/deck name ending in a literal backslash (e.g. "foo\") swallow the
+    # closing quote (Anki's search syntax treats \" inside a quoted term as
+    # an escaped quote, not a terminator), producing an unterminated,
+    # malformed search string.
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _quote_tag(tag: str) -> str:
     # Anki tags can contain spaces/special chars; quote defensively.
-    escaped = tag.replace('"', '\\"')
-    return f'tag:"{escaped}"'
+    return f'tag:"{_escape_for_quotes(tag)}"'
 
 
 def _quote_deck(deck: str) -> str:
     # deck:X also matches X's subdecks, which is what "pick a deck" should mean.
-    escaped = deck.replace('"', '\\"')
-    return f'deck:"{escaped}"'
+    return f'deck:"{_escape_for_quotes(deck)}"'
 
 
 def build_query(filters: QueryFilters) -> str:
