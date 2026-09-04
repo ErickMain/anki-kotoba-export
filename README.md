@@ -2,7 +2,7 @@
 
 Fast export of Anki cards to [kotobaweb.com](https://kotobaweb.com) "Type the reading!" custom decks, with saved presets for recurring study sessions (forgotten today, leeches, suspended, by tag...).
 
-Repo: [github.com/ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export) · [Releases](https://github.com/ErickMain/anki-kotoba-export/releases) (grab the `.ankiaddon` from the latest one to install) · [User Guide](USER_GUIDE.md) (step-by-step walkthrough)
+Repo: [github.com/ErickMain/anki-kotoba-export](https://github.com/ErickMain/anki-kotoba-export) · [Releases](https://github.com/ErickMain/anki-kotoba-export/releases) (grab the `.ankiaddon` from the latest one to install) · [User Guide](USER_GUIDE.md) (step-by-step walkthrough) · [License](LICENSE) (MIT)
 
 ## Why there's no "just click connect"
 
@@ -13,13 +13,12 @@ Kotoba's backend only supports login via Discord OAuth2 + a browser session cook
 
 ## Install
 
-Requires Anki 2.1.50+ on a **Qt6** build. Anki 2.1.50 shipped separate Qt5
-and Qt6 packaged builds side by side, and this add-on uses Qt6-only enum
-syntax throughout its dialogs (e.g. `Qt.ItemFlag.ItemIsUserCheckable`) -
-Anki's PyQt5-compatibility shims don't cover that direction, so it will
-fail to open any dialog on a Qt5 build even though its version number
-qualifies. If in doubt, install a recent Anki release (Qt6 has been the
-default packaged build for a long time).
+Requires Anki 25.02+ (enforced by the manifest - Anki will refuse to load
+this add-on on anything older, rather than installing and crashing on
+first open). This add-on uses Qt6-only enum syntax throughout its dialogs
+(e.g. `Qt.ItemFlag.ItemIsUserCheckable`); Anki's own Qt5 packaged builds
+were discontinued in [January 2025](https://github.com/ankitects/anki/issues/3615),
+so 25.02+ guarantees a Qt6 environment.
 
 **From a release (recommended for a second machine):** download the `.ankiaddon` from the [latest release](https://github.com/ErickMain/anki-kotoba-export/releases/latest), then in Anki: Tools -> Add-ons -> Install from file.
 
@@ -43,6 +42,21 @@ To package it for sharing/AnkiWeb instead, zip the *contents* of `kotoba_export/
 5. **Export presets... / Import presets...** back up your presets to a JSON file or move them to another machine. This only covers presets - not your advanced-mode session cookie, and not the `.ankiaddon` package itself (that's the code; see Install above). Importing upserts by id, so re-importing the same file updates existing presets rather than duplicating them; note type and field mappings should be double-checked after importing onto a different collection, since they're matched by name.
 6. **History...** shows a log of past runs - preset, deck, card count, outcome, trigger, and how long it took - so you can tell at a glance whether a run actually did anything. **Export to CSV...** there saves the full log to a file (chronological order) if you want to track it outside Anki, e.g. in a spreadsheet. Duration is the delivery action's own time for a manual run, or the full search+build+upload for an automatic one - the number worth watching if you're wondering whether a shutdown-triggered preset is adding a noticeable pause when you close Anki.
 7. **Automatic export**: a preset's editor has three "Automatic export on" checkboxes - Anki startup, Anki shutdown, and AnkiWeb sync finishing - check any combination, for running it unattended straight to Kotoba via direct-API upload, no preview, since there's no one there to click Upload. This needs two things to actually be on: at least one of the preset's own checkboxes, *and* "Enable automatic export" in Advanced settings (a global switch, off by default). "Forgotten today"-style presets belong on shutdown or sync, not startup - startup fires before you've reviewed anything that day. Shutdown- or sync-triggered runs can add a brief pause (they wait on the network request) - shutdown delays Anki closing, sync delays returning control right after the sync finishes. Anything unexpected - network failure, no cards, the switch not actually being on - gets logged to History instead of interrupting Anki.
+
+## Known limitations
+
+- **Kotoba's direct-upload API is undocumented and unversioned.** It could
+  change or break without warning - the clipboard-free "CSV file export"
+  path (the default) doesn't depend on it at all and is the fallback if
+  advanced mode ever stops working.
+- **Your session cookie is a real credential**, stored in Anki's own
+  per-add-on config (`meta.json`), in plaintext, as Anki has no per-add-on
+  secret store. Anki add-ons are not sandboxed from each other, so treat
+  it like a password and only enable advanced mode if you're comfortable
+  with that. See the warning text in *Advanced settings...* for details.
+- If something looks wrong, check **History...** first (every automatic
+  run logs there, success or failure), then open an
+  [issue](https://github.com/ErickMain/anki-kotoba-export/issues).
 
 ## Development
 

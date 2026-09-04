@@ -3,7 +3,7 @@
     "package": "kotoba_export",
     "mod": 0,
     "conflicts": [],
-    "min_point_version": 50,
+    "min_point_version": 250200,
     "max_point_version": 0,
-    "human_version": "0.12.6"
+    "human_version": "0.12.7"
 }
