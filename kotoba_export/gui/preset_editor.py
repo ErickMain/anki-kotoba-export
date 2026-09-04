@@ -204,7 +204,7 @@ class PresetEditorDialog(QDialog):
 
         auto_run_tooltip = (
             "Uploads this preset to Kotoba unattended, with no preview - only sensible for "
-            "advanced/direct-API mode, since there's no one there to click Copy/Upload. Also "
+            "advanced/direct-API mode, since there's no one there to click Upload. Also "
             "needs \"Enable automatic export\" turned on in Advanced settings; checking these "
             "boxes alone does not start anything. \"Forgotten today\"-style presets belong on "
             "shutdown or sync, not startup - startup runs before you've reviewed anything that day."

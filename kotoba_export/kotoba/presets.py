@@ -124,7 +124,7 @@ class Preset:
 
     # Subset of ALL_AUTO_RUN_TRIGGERS ("startup"/"shutdown"/"sync"): runs
     # this preset unattended via direct-API upload (there's no one there to
-    # click Copy/Upload) whenever any checked trigger fires - Anki opening,
+    # click Upload) whenever any checked trigger fires - Anki opening,
     # closing, or finishing an AnkiWeb sync. Empty list = never runs
     # automatically. Requires advanced mode AND the global auto-export
     # switch (config["advanced"]["auto_export_enabled"]) to both be on -

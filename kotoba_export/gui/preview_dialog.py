@@ -1,13 +1,14 @@
 """Shows the cards an export is about to send, and offers the two delivery
-paths: clipboard+browser (always available) or direct API upload (only when
-advanced mode is configured with a session cookie).
+paths: save as a .csv file for Kotoba's own "Import from File" (always
+available - Kotoba's custom-deck import is file-based, there's no
+paste-a-CSV option on their end) or direct API upload (only when advanced
+mode is configured with a session cookie).
 """
 import time
 
 from aqt import dialogs, mw
 from aqt.qt import (
     QAbstractItemView,
-    QApplication,
     QCursor,
     QDialog,
     QDialogButtonBox,
@@ -24,15 +25,13 @@ from aqt.qt import (
     QTableWidgetItem,
     QVBoxLayout,
 )
-from aqt.utils import openLink, showInfo, showWarning, tooltip
+from aqt.utils import showInfo, showWarning, tooltip
 
 from .. import config_store
 from ..kotoba import api as kotoba_api
 from ..kotoba import format as kotoba_format
 from ..kotoba import history
 from ..kotoba import upload as upload_mod
-
-KOTOBA_DASHBOARD_URL = "https://kotobaweb.com/dashboard"
 
 
 class PreviewDialog(QDialog):
@@ -87,10 +86,6 @@ class PreviewDialog(QDialog):
         layout.addWidget(self.table)
 
         btn_row = QHBoxLayout()
-        copy_btn = QPushButton("Copy CSV + Open Kotoba")
-        copy_btn.clicked.connect(self._copy_and_open)
-        btn_row.addWidget(copy_btn)
-
         save_btn = QPushButton("Save as .csv...")
         save_btn.clicked.connect(self._save_csv)
         btn_row.addWidget(save_btn)
@@ -147,21 +142,6 @@ class PreviewDialog(QDialog):
         )
         history.append_entry(self.config, entry)
         config_store.save_config(self.config)
-
-    def _copy_and_open(self):
-        start = time.perf_counter()
-        QApplication.clipboard().setText(self._csv_text())
-        openLink(KOTOBA_DASHBOARD_URL)
-        elapsed = time.perf_counter() - start
-        self._log_history(
-            history.OUTCOME_COPIED, self.deck_name_edit.text().strip() or self.result.deck_name, duration_seconds=elapsed
-        )
-        showInfo(
-            "CSV copied to your clipboard and kotobaweb.com opened in your browser.\n\n"
-            f"In Kotoba: New Custom Deck -> name it \"{self.deck_name_edit.text()}\" -> "
-            "Import -> paste.",
-            parent=self,
-        )
 
     def _save_csv(self):
         path, _ = QFileDialog.getSaveFileName(
