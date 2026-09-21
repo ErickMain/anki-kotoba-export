@@ -23,6 +23,36 @@ def test_clean_field_strips_html_sound_and_furigana():
     assert "means cat" in result
 
 
+def test_clean_field_joins_glossary_list_items_with_commas():
+    # Yomitan/Jitendex mining templates wrap each gloss word in its own
+    # <li> inside <ul data-sc-content="glossary"> - generic tag-stripping
+    # (both Anki's own strip_html and this module's fallback) deletes <li>
+    # boundaries with nothing in their place, jamming the words together.
+    raw = '<ul data-sc-content="glossary"><li>willpower</li><li>guts</li><li>spirit</li></ul>'
+    assert clean.clean_field(raw) == "willpower, guts, spirit"
+
+
+def test_clean_field_does_not_join_an_unrelated_list():
+    # A <ul> with no data-sc-content="glossary" attribute is left to the
+    # generic block-separator handling below (one item per line), not the
+    # comma-join specific to that one marked structure.
+    raw = "<ul><li>根性骨</li><li>根性焼き</li></ul>"
+    result = clean.clean_field(raw)
+    assert result == "根性骨\n根性焼き"
+
+
+def test_clean_field_inserts_newline_for_div_and_li_and_p():
+    # Confirmed against Anki's actual strip_html source (rslib/src/text.rs)
+    # that it is a blind tag-stripper with no special handling for any of
+    # these - checked here through the fallback path (no anki module in
+    # this test environment) but the separator-insertion this exercises
+    # runs identically before either implementation is called.
+    assert clean.clean_field("<div>a</div><div>b</div>") == "a\nb"
+    assert clean.clean_field("<p>a</p><p>b</p>") == "a\nb"
+    assert clean.clean_field("<ul><li>a</li><li>b</li></ul>") == "a\nb"
+    assert clean.clean_field("a<br>b<br/>c<br />d") == "a\nb\nc\nd"
+
+
 def test_clean_field_can_keep_reading_instead_of_base():
     result = clean.clean_field("猫[ねこ]", furigana_keep="reading")
     assert result == "ねこ"
@@ -143,3 +173,155 @@ def test_format_comment_sections_marker_at_the_very_start_gets_no_leading_break(
 
 def test_format_comment_sections_empty_input():
     assert clean.format_comment_sections("") == ""
+
+
+# Within-entry separation - real excerpts from a live mined export where a
+# single Jitendex entry's own gloss list, example sentence, translation,
+# and second-sense glosses ran together with no separator at all.
+
+
+def test_format_comment_sections_separates_gloss_list_from_japanese_example():
+    # From 突きつける.
+    text = "to thrust (at someone)to stickto point (a gun)その泥棒は少年にナイフを突きつけようとした。"
+    result = clean.format_comment_sections(text)
+    assert "\n" in result
+    assert result.split("\n")[-1].startswith("その泥棒")
+    assert result.replace("\n", "") == text
+
+
+def test_format_comment_sections_separates_japanese_example_from_translation():
+    text = "その泥棒は少年にナイフを突きつけようとした。The robber tried to plunge the knife into the boy."
+    result = clean.format_comment_sections(text)
+    assert result == (
+        "その泥棒は少年にナイフを突きつけようとした。\n"
+        "The robber tried to plunge the knife into the boy."
+    )
+
+
+def test_format_comment_sections_separates_translation_from_trailing_second_sense():
+    # From 根性 - the translation runs directly into a second sense's gloss
+    # list with no separator.
+    text = "I've set the stage so now you just have to show some guts, OK?characternaturedispositionpersonality"
+    result = clean.format_comment_sections(text)
+    assert result == (
+        "I've set the stage so now you just have to show some guts, OK?\n"
+        "characternaturedispositionpersonality"
+    )
+
+
+def test_format_comment_sections_separates_forms_tag_with_no_preceding_punctuation():
+    # From 絶つ - "forms" (Jitendex's alternate-spellings tag) glued
+    # directly onto the last gloss, itself glued onto the first alternate
+    # spelling.
+    text = "to abstain (from)to give upforms断つ絶つ"
+    result = clean.format_comment_sections(text)
+    assert result == "to abstain (from)to give up\nforms\n断つ絶つ"
+
+
+def test_format_comment_sections_does_not_split_a_digit_directly_before_kanji():
+    # "第5版" (5th edition) is normal Japanese typography with an embedded
+    # Arabic numeral - must not be mistaken for an English-to-Japanese
+    # boundary the way a Latin letter directly before kanji would be.
+    text = "(新和英大辞典 第5版) にゅうもん【入門】1 〔弟子入り〕"
+    result = clean.format_comment_sections(text)
+    assert "第5版" in result
+
+
+def test_format_comment_sections_leaves_citation_domain_intact():
+    # Jitendex.org's own citation must not be split by the same rule that
+    # separates a translation from a following gloss run.
+    text = "(★, Jitendex.org [2026-04-04]) noun willpower"
+    result = clean.format_comment_sections(text)
+    assert "Jitendex.org" in result
+    assert "Jitendex.\norg" not in result
+
+
+def test_format_comment_sections_real_kokoro_excerpt_end_to_end():
+    # The full real 根性 comment field, exactly as mined - verifies the
+    # whole pipeline together rather than one boundary at a time.
+    text = (
+        "(★, Jitendex.org [2026-04-04]) nounwillpowergutsdeterminationgritspirit"
+        "セッティングは整えておいたから、後はまーくんが根性見せなきゃダメだからね？"
+        "I've set the stage so now you just have to show some guts, OK?"
+        "characternaturedispositionpersonality"
+    )
+    result = clean.format_comment_sections(text)
+    lines = result.split("\n")
+    assert lines[0] == "(★, Jitendex.org [2026-04-04]) nounwillpowergutsdeterminationgritspirit"
+    assert lines[1].startswith("セッティングは")
+    assert lines[1].endswith("？")
+    assert lines[2] == "I've set the stage so now you just have to show some guts, OK?"
+    assert lines[3] == "characternaturedispositionpersonality"
+    # Nothing dropped - still just whitespace insertion.
+    assert result.replace("\n", "") == text
+
+
+# Real raw field HTML, exactly as exported from a live 根性 note (Yomitan/
+# Jitendex-style mining template) - the ground-truth case that surfaced
+# both the missing glossary-list-comma-join and the missing block-tag
+# separator handling, verified end to end through clean_field ->
+# format_comment_sections together, not just one boundary at a time.
+_KONJOU_RAW_HTML = (
+    '<div style="text-align: left;" class="yomitan-glossary"><ol>'
+    '<li data-dictionary="Jitendex.org [2026-04-04]"><i>(★, Jitendex.org [2026-04-04])</i> '
+    '<span><ul data-sc-content="sense-groups" lang="ja"><li data-sc-content="sense-group">'
+    '<span data-sc-class="tag" data-sc-code="n" data-sc-content="part-of-speech-info" '
+    'title="noun (common) (futsuumeishi)">noun</span><ol>'
+    '<li data-sc-content="sense" style="list-style-type: &quot;①&quot;;">'
+    '<ul data-sc-content="glossary"><li>willpower</li><li>guts</li><li>determination</li>'
+    '<li>grit</li><li>spirit</li></ul>'
+    '<div data-sc-content="extra-info"><div><div data-sc-class="extra-box" '
+    'data-sc-content="example-sentence" data-sc-source="75553">'
+    '<div data-sc-content="example-sentence-a"><span lang="ja">'
+    "セッティングは整えておいたから、後はまーくんが"
+    '<span data-sc-content="example-keyword">根性</span>見せなきゃダメだからね？</span></div>'
+    '<div data-sc-content="example-sentence-b"><span lang="en">'
+    "I've set the stage so now you just have to show some guts, OK?"
+    "</span></div></div></div></div></li>"
+    '<li data-sc-content="sense" style="list-style-type: &quot;②&quot;;">'
+    '<ul data-sc-content="glossary"><li>character</li><li>nature</li>'
+    "<li>disposition</li><li>personality</li></ul></li></ol></li></ul>"
+    '<div data-sc-content="attribution">'
+    '<a href="https://www.edrdg.org/jmwsgi/entr.py?svc=jmdict&amp;q=1290210">'
+    "<span>JMdict</span><span style=\"display:none;\"></span></a> | "
+    '<a href="https://tatoeba.org/en/sentences/show/75553">'
+    '<span>Tatoeba</span><span style="display:none;"></span></a></div></span></li>'
+    '<li data-dictionary="大辞林　第四版">'
+    "<i>(大辞林　第四版)</i> <span>"
+    '<span data-sc-name="見出部"><span data-sc-name="見出仮名" lang="ja" '
+    'style="font-weight: bold;">'
+    'こん<span data-sc-name="語構成" style="margin-right: 0.5em;"></span>じょう</span>'
+    '<span data-sc-name="歴史仮名" lang="ja" style="font-size: 0.6em;">(—じやう)</span>'
+    '<span data-sc-name="表記G" lang="ja">【<span data-sc-name="標準表記" lang="ja">根性</span>】</span>'
+    "</span>"
+    '<div data-sc-name="解説部"><div data-sc-name="大語義"><div data-sc-name="準大語義">'
+    '<div data-sc-name="中語義"><div data-sc-name="語義G">'
+    '<span data-sc-name="語義Gnum">①</span>'
+    '<span data-sc-name="語釈" lang="ja">生まれつきの性質。根本的な考え方。</span>'
+    "</div></div></div></div></div></span></li>"
+    '<li data-dictionary="JMdict"><i>(JMdict)</i> <span lang="ja">'
+    "こんじょう【根性】<br>〔n〕<br>"
+    "1 willpower | guts | determination | grit | spirit<br>"
+    "2 character | nature | disposition | personality</span></li>"
+    "</ol></div>"
+)
+
+
+def test_real_konjou_glossary_end_to_end():
+    cleaned = clean.clean_field(_KONJOU_RAW_HTML)
+    result = clean.format_comment_sections(cleaned)
+    lines = result.split("\n")
+
+    assert lines[0] == "(★, Jitendex.org [2026-04-04])"
+    assert lines[1] == "noun"
+    assert lines[2] == "willpower, guts, determination, grit, spirit"
+    assert lines[3].startswith("セッティングは")
+    assert lines[4] == "I've set the stage so now you just have to show some guts, OK?"
+    assert lines[5] == "character, nature, disposition, personality"
+    assert "JMdict | Tatoeba" in lines
+    assert any(line.startswith("(大辞林") and "第四版" in line for line in lines)
+    assert any(line.startswith("(JMdict)") for line in lines)
+    # No tags, no HTML entities, and no blank lines anywhere in the result.
+    assert "<" not in result
+    assert "&quot;" not in result
+    assert "\n\n" not in result

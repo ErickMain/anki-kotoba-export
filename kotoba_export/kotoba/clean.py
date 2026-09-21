@@ -43,9 +43,63 @@ def _resolve_ruby_html(text: str, keep: str = "base") -> str:
     return _RUBY_INNER_TAGS_RE.sub("", text)
 
 
+_GLOSSARY_LIST_RE = re.compile(
+    r'<ul[^>]*data-sc-content="glossary"[^>]*>(.*?)</ul>', re.IGNORECASE | re.DOTALL
+)
+_LI_OPEN_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
+_LI_CLOSE_RE = re.compile(r"</li\s*>", re.IGNORECASE)
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_DIV_OPEN_RE = re.compile(r"<div[^>]*>", re.IGNORECASE)
+_P_OPEN_RE = re.compile(r"<p[^>]*>", re.IGNORECASE)
+
+
+def _join_glossary_list_items(text: str) -> str:
+    """Yomitan/Jitendex mining templates wrap each individual gloss word in
+    its own <li> inside a <ul data-sc-content="glossary"> - e.g.
+    <ul data-sc-content="glossary"><li>willpower</li><li>guts</li>...</ul>.
+    Generic tag-stripping deletes the <li> boundaries with nothing in their
+    place, jamming the words together ("willpowerguts..."), so this has to
+    be resolved before any generic HTML stripping runs - the same reason
+    <ruby> is resolved early, above. Unlike other structural boundaries
+    (separated with a newline - see _insert_block_separators below), a
+    short list of near-synonyms reads better joined inline than stacked one
+    per line, so this specific, narrowly-identified list gets a comma join
+    instead.
+    """
+    if 'data-sc-content="glossary"' not in text:
+        return text
+
+    def _join_one_list(match):
+        items = _LI_OPEN_RE.split(match.group(1))[1:]  # [0] is text before the first <li>, always empty here
+        words = [_LI_CLOSE_RE.sub("", item).strip() for item in items]
+        return ", ".join(w for w in words if w)
+
+    return _GLOSSARY_LIST_RE.sub(_join_one_list, text)
+
+
+def _insert_block_separators(text: str) -> str:
+    """Anki's own strip_html - preferred below over the fallback, since it
+    handles more edge cases (MathJax, LaTeX, etc.) - is a blind regex
+    tag-stripper with NO special handling for block-level tags: checked
+    directly against Anki's source (rslib/src/text.rs), it's just
+    `HTML.replace_all(html, "")`. <br>/<div>/<p>/<li> are deleted with
+    nothing put in their place, jamming adjacent block-level content
+    together with zero separation - not only inside this addon's own
+    fallback path (which pytest exercises, since Anki isn't installed
+    there), but in every real run inside actual Anki too. This runs before
+    either strip_html implementation, turning those tags into a literal
+    newline so the separation survives regardless of which one ends up
+    used. Any <li> that was part of a glossary list has already been
+    consumed by _join_glossary_list_items above by the time this runs.
+    """
+    text = _BR_RE.sub("\n", text)
+    text = _DIV_OPEN_RE.sub("\n", text)
+    text = _P_OPEN_RE.sub("\n", text)
+    text = _LI_OPEN_RE.sub("\n", text)
+    return text
+
+
 def _fallback_strip_html(text: str) -> str:
-    text = text.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
-    text = text.replace("<div>", "\n").replace("</div>", "")
     text = _TAG_RE.sub("", text)
     return html.unescape(text)
 
@@ -73,6 +127,8 @@ def clean_field(raw: str, strip_furigana_brackets: bool = True, furigana_keep: s
     # tags are gone there's no readable fallback the way base[reading] has,
     # so leaving this alone only produces garbled text, never a valid choice.
     text = _resolve_ruby_html(text, keep=furigana_keep)
+    text = _join_glossary_list_items(text)
+    text = _insert_block_separators(text)
     text = (_anki_strip_html or _fallback_strip_html)(text)
 
     if strip_furigana_brackets:
@@ -134,11 +190,38 @@ _DICTIONARY_MARKER_RE = re.compile(
 )
 
 
+# Beyond separating whole dictionary-source blocks (above), a single
+# Jitendex-sourced block itself concatenates its own parts - a POS/gloss
+# list, an example sentence, its translation, sometimes a second sense's
+# gloss list, and a "forms" (alternate spellings) list - with zero
+# separator between any of them, e.g. "...to give upforms断つ絶つ" or
+# "...guts, OK?characternaturedispositionpersonality". There's no reliable
+# way to split the glosses themselves (bare English words glued together,
+# e.g. "willpowergutsdeterminationgritspirit", would need a wordlist to
+# segment - the same kind of full parsing already rejected as too fragile
+# for picking a single dictionary above) - but the boundaries AROUND an
+# example sentence and its translation are unambiguous from script and
+# punctuation alone, and are worth separating even when the gloss list on
+# either side stays run together.
+# Deliberately excludes digits: a Latin digit directly touching a kanji is
+# routinely normal Japanese typography (edition markers like "第5版", years
+# like "2026年", counters like "3つ"), not an English-to-Japanese boundary.
+_ASCII_TO_JAPANESE_RE = re.compile(r"(?<=[a-zA-Z)\]])(?=[぀-ヿ一-鿿])")
+_JAPANESE_SENTENCE_END_TO_LATIN_CAP_RE = re.compile(r"(?<=[。？！])(?=[A-Z])")
+# Excludes the domain suffixes used in the citation stamps above (e.g.
+# "Jitendex.org") so this doesn't split those apart.
+_LATIN_SENTENCE_END_TO_LOWER_RE = re.compile(r"(?<=[.?!])(?!org\b|com\b|net\b|edu\b|io\b|jp\b)(?=[a-z])")
+_GLUED_FORMS_TAG_RE = re.compile(r"(?<=[a-z])(?=forms\b)")
+_MULTI_NEWLINE_RE = re.compile(r"\n{2,}")
+
+
 def format_comment_sections(text: str) -> str:
     """Insert a newline before each recognized dictionary-source marker (see
-    _DICTIONARY_MARKER_RE) so a long mined comment reads as distinct
-    dictionary entries instead of one run-on wall of text. A comment with no
-    recognized markers - or just one, at the very start - is returned as-is.
+    _DICTIONARY_MARKER_RE), then at the unambiguous script/punctuation
+    boundaries within a single entry (see the regexes above), so a long
+    mined comment reads as distinct sections instead of one run-on wall of
+    text. A comment with no recognized markers - or just one, at the very
+    start - is returned as-is.
     """
     if not text:
         return text
@@ -146,4 +229,13 @@ def format_comment_sections(text: str) -> str:
     def _break_before(match):
         return match.group(0) if match.start() == 0 else "\n" + match.group(0)
 
-    return _DICTIONARY_MARKER_RE.sub(_break_before, text)
+    text = _DICTIONARY_MARKER_RE.sub(_break_before, text)
+    text = _ASCII_TO_JAPANESE_RE.sub("\n", text)
+    text = _JAPANESE_SENTENCE_END_TO_LATIN_CAP_RE.sub("\n", text)
+    text = _LATIN_SENTENCE_END_TO_LOWER_RE.sub("\n", text)
+    text = _GLUED_FORMS_TAG_RE.sub("\n", text)
+    # clean_field's own HTML-structure-based breaks (e.g. a <div> right
+    # before a dictionary citation) and the marker-based break just above
+    # can both land at the same point - collapse the resulting blank line
+    # rather than leave two rules' insertions stacked.
+    return _MULTI_NEWLINE_RE.sub("\n", text)
