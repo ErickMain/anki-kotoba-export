@@ -41,6 +41,28 @@ def test_clean_field_does_not_join_an_unrelated_list():
     assert result == "根性骨\n根性焼き"
 
 
+def test_clean_field_separates_adjacent_tag_spans_with_a_space():
+    # Yomitan/Jitendex wraps each short label (conjugation class,
+    # transitivity, "usually kana", etc.) in its own
+    # <span data-sc-class="tag">, relying on a CSS margin for the visible
+    # gap - lost once tags are stripped, e.g. "5-dantransitivekana".
+    raw = (
+        '<span data-sc-class="tag">5-dan</span>'
+        '<span data-sc-class="tag">transitive</span>'
+        '<span data-sc-class="tag">kana</span>'
+    )
+    assert clean.clean_field(raw) == "5-dan transitive kana"
+
+
+def test_clean_field_does_not_insert_a_space_for_a_plain_span():
+    # Only spans specifically marked data-sc-class="tag" are targeted -
+    # a generic <span> (e.g. wrapping one word inside an example sentence)
+    # must not get an inserted space, or real running text would be
+    # wrongly broken apart.
+    raw = '後はまーくんが<span data-sc-content="example-keyword">根性</span>見せなきゃ'
+    assert clean.clean_field(raw) == "後はまーくんが根性見せなきゃ"
+
+
 def test_clean_field_inserts_newline_for_div_and_li_and_p():
     # Confirmed against Anki's actual strip_html source (rslib/src/text.rs)
     # that it is a blind tag-stripper with no special handling for any of

@@ -51,6 +51,16 @@ _LI_CLOSE_RE = re.compile(r"</li\s*>", re.IGNORECASE)
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _DIV_OPEN_RE = re.compile(r"<div[^>]*>", re.IGNORECASE)
 _P_OPEN_RE = re.compile(r"<p[^>]*>", re.IGNORECASE)
+# Yomitan/Jitendex wraps each short label (conjugation class, transitivity,
+# "usually kana", etc.) in its own <span data-sc-class="tag">, relying on a
+# CSS margin for the visible gap between adjacent ones (e.g.
+# "5-dan"/"transitive"/"kana") - lost the same way as everything else here
+# once tags are stripped, producing "5-dantransitivekana". Only the
+# specific data-sc-class="tag" spans are targeted, not <span> in general -
+# <span> is also used for plain inline text (e.g. wrapping a whole example
+# sentence, or one word inside it), where inserting a space would wrongly
+# break up otherwise-unbroken text.
+_TAG_SPAN_OPEN_RE = re.compile(r'<span[^>]*data-sc-class="tag"[^>]*>', re.IGNORECASE)
 
 
 def _join_glossary_list_items(text: str) -> str:
@@ -91,11 +101,17 @@ def _insert_block_separators(text: str) -> str:
     newline so the separation survives regardless of which one ends up
     used. Any <li> that was part of a glossary list has already been
     consumed by _join_glossary_list_items above by the time this runs.
+
+    Also inserts a space before each data-sc-class="tag" span (see above) -
+    a lighter separator than the newline used for the other tags here,
+    since a run of short labels reads better as one compact line than
+    stacked one per line.
     """
     text = _BR_RE.sub("\n", text)
     text = _DIV_OPEN_RE.sub("\n", text)
     text = _P_OPEN_RE.sub("\n", text)
     text = _LI_OPEN_RE.sub("\n", text)
+    text = _TAG_SPAN_OPEN_RE.sub(" ", text)
     return text
 
 
